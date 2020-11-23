@@ -188,6 +188,18 @@ proc refine(sg: var SudokuSolverGrid, g: SudokuGrid) =
             else:
                row += 1
 
+   # https://homepages.cwi.nl/~aeb/games/sudoku/solving10.html
+
+   # TODO check case
+
+   # TODO hidden n-set
+
+   # TODO naked n-set
+
+   # TODO X-wing' for n=2, 'Swordfish' for n=3, 'Jellyfish' for n=4.
+
+
+
 proc solveNaive*(g: var SudokuGrid, sg: var SudokuSolverGrid) =
    var canSolve = true
    while canSolve:
@@ -204,15 +216,15 @@ proc solveNaive*(g: var SudokuGrid, sg: var SudokuSolverGrid) =
                g.update(sg, row, col, possibility)
 
 proc solve(g: var SudokuGrid, sg: var SudokuSolverGrid) =
-   var maxIter = 1
+   var maxIter = 10
    var iter = 0
    while true:
       g.solveNaive(sg)
       if g.full or sg.empty:
          break
 
-      sg.refine(g)
-      echo sg
+      sg.refineMatching(g)
+      # echo sg
 
       iter += 1
       if iter >= maxIter:
@@ -225,42 +237,18 @@ proc solve*(g: var SudokuGrid) =
 
 proc main*() =
    # var grid: SudokuGrid = [
-   #    0, 0, 4, 0, 7, 3, 0, 5, 0,
-   #    3, 6, 0, 0, 0, 8, 9, 0, 0,
-   #    8, 5, 1, 2, 0, 0, 0, 3, 0,
-   #    4, 0, 9, 8, 6, 7, 3, 0, 0,
-   #    1, 0, 0, 0, 0, 5, 0, 0, 0,
-   #    0, 8, 0, 1, 9, 0, 7, 0, 0,
-   #    0, 0, 0, 9, 0, 2, 0, 7, 1,
-   #    0, 1, 2, 0, 0, 6, 0, 8, 0,
-   #    9, 0, 5, 7, 8, 1, 2, 6, 0
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
    # ]
 
-   # var grid: SudokuGrid = [
-   #    0, 7, 6, 0, 0, 0, 0, 8, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    4, 0, 0, 0, 5, 8, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 3, 0, 0, 0,
-   #    0, 0, 1, 2, 0, 6, 7, 0, 0,
-   #    0, 8, 0, 1, 9, 4, 2, 0, 3,
-   #    7, 6, 0, 0, 0, 0, 8, 0, 0,
-   #    0, 0, 3, 8, 0, 7, 1, 9, 2,
-   #    0, 0, 0, 0, 4, 0, 0, 0, 6
-   # ]
-
-   # var grid: SudokuGrid = [
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
-   #    0, 0, 0, 0, 0, 0, 0, 0, 0
-   # ]
-
-   # Easy
+   # Easy - Arizona Daily Wildcat: Tuesday, Jan 17th 2006
    # var grid: SudokuGrid = [
    #    [0, 0, 0, 2, 6, 0, 7, 0, 1],
    #    [6, 8, 0, 0, 7, 0, 0, 9, 0],
@@ -270,10 +258,23 @@ proc main*() =
    #    [0, 5, 0, 0, 0, 3, 0, 2, 8],
    #    [0, 0, 9, 3, 0, 0, 0, 7, 4],
    #    [0, 4, 0, 0, 5, 0, 0, 3, 6],
-   #    [7, 0, 3, 0, 1, 8, 0, 0, 0]
+   #    [7, 0, 3, 0, 1, 8, 0, 0, 0],
    # ]
 
-   # Intermediate
+   # Easy - Arizona Daily Wildcat: Wednesday, Jan 18th 2006
+   # var grid: SudokuGrid = [
+   #    [1, 0, 0, 4, 8, 9, 0, 0, 6],
+   #    [7, 3, 0, 0, 0, 0, 0, 4, 0],
+   #    [0, 0, 0, 0, 0, 1, 2, 9, 5],
+   #    [0, 0, 7, 1, 2, 0, 6, 0, 0],
+   #    [5, 0, 0, 7, 0, 3, 0, 0, 8],
+   #    [0, 0, 6, 0, 9, 5, 7, 0, 0],
+   #    [9, 1, 4, 6, 0, 0, 0, 0, 0],
+   #    [0, 2, 0, 0, 0, 0, 0, 3, 7],
+   #    [8, 0, 0, 5, 1, 2, 0, 0, 4],
+   # ]
+
+   # Intermediate - Daily Telegraph January 19th "Diabolical"
    var grid: SudokuGrid = [
       [0, 2, 0, 6, 0, 8, 0, 0, 0],
       [5, 8, 0, 0, 0, 9, 7, 0, 0],
@@ -283,7 +284,7 @@ proc main*() =
       [0, 0, 8, 0, 0, 0, 0, 1, 3],
       [0, 0, 0, 0, 2, 0, 0, 0, 0],
       [0, 0, 9, 8, 0, 0, 0, 3, 6],
-      [0, 0, 0, 3, 0, 6, 0, 9, 0]
+      [0, 0, 0, 3, 0, 6, 0, 9, 0],
    ]
 
    # Hard
@@ -296,7 +297,7 @@ proc main*() =
    #    [0, 0, 0, 3, 0, 6, 0, 4, 5],
    #    [0, 4, 0, 2, 0, 0, 0, 6, 0],
    #    [9, 0, 3, 0, 0, 0, 0, 0, 0],
-   #    [0, 2, 0, 0, 0, 0, 1, 0, 0]
+   #    [0, 2, 0, 0, 0, 0, 1, 0, 0],
    # ]
 
    echo(grid)
