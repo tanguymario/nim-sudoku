@@ -1,221 +1,308 @@
 import algorithm
+import random
+
+randomize()
 
 type
-    SudokuGrid* = array[9 * 9, int]
+   SudokuCell* = int
+   SudokuGrid* = array[9, array[9, SudokuCell]]
 
-    SudokuSolverCase = object
-        possibilities: array[9, bool]
-        nb: int
-    SudokuSolverGrid = array[9 * 9, SudokuSolverCase]
+   SudokuSolverCell = object
+      possibilities: array[9, bool]
+      nb: int
+   SudokuSolverGrid = array[9, array[9, SudokuSolverCell]]
 
-proc `[]`*(g: SudokuGrid, row, col: int): int = return g[row * 9 + col]
-proc `[]=`*(g: var SudokuGrid, row, col, val: int) = g[row * 9 + col] = val
-proc completed*(g: SudokuGrid): bool = return not g.contains(0)
+proc filled*(c: SudokuCell): bool = return c != 0
+proc full*(g: SudokuGrid): bool =
+   for row in g:
+      if row.contains(0):
+         return false
+   return true
 
-proc `$`*(grid: SudokuGrid): string =
-    result = ""
-    result &= "╔═══════╦═══════╦═══════╗\n"
-    for row in 0 ..< 9:
-        if row > 0 and row mod 3 == 0:
-            result &= "╠═══════╬═══════╬═══════╣\n"
-        result &= "║ "
-        for col in 0 ..< 9:
-            result &= (if grid[row, col] == 0: " " else: $grid[row, col])
-            result &= (if (col + 1) mod 3 == 0: " ║ " else: " ")
-        result &= "\n"
-    result &= "╚═══════╩═══════╩═══════╝\n"
+proc broken*(g: SudokuGrid): bool =
+   for row in 0 ..< 9:
+      for col in 0 ..< 9:
+         for tmpRow in 0 ..< 9:
+            if row != tmpRow:
+               if g[row][col].filled and g[row][col] == g[tmpRow][col]:
+                  return true
+         for tmpCol in 0 ..< 9:
+            if col != tmpCol:
+               if g[row][col].filled and g[row][col] == g[row][tmpCol]:
+                  return true
+         for y in 0 ..< 3:
+            for x in 0 ..< 3:
+               let tmpRow = int(row / 3) * 3 + y
+               let tmpCol = int(col / 3) * 3 + x
+               if tmpRow != row and tmpCol != col:
+                  if g[row][col].filled and g[row][col] == g[row][tmpCol]:
+                     return true
 
-proc `[]`(sg: SudokuSolverGrid, row, col: int): SudokuSolverCase =
-    return sg[row * 9 + col]
+   return false
 
-proc `[]`(sg: var SudokuSolverGrid, row, col: int): var SudokuSolverCase =
-    return sg[row * 9 + col]
+proc `$`*(g: SudokuGrid): string =
+   result = ""
+   result &= "╔═══════╦═══════╦═══════╗\n"
+   for row in 0 ..< 9:
+      if row > 0 and row mod 3 == 0:
+         result &= "╠═══════╬═══════╬═══════╣\n"
+      result &= "║ "
+      for col in 0 ..< 9:
+         result &= (if g[row][col].filled: $g[row][col] else: " ")
+         result &= (if (col + 1) mod 3 == 0: " ║ " else: " ")
+      result &= "\n"
+   result &= "╚═══════╩═══════╩═══════╝\n"
 
-proc remove(sc: var SudokuSolverCase, val: int) =
-    if sc.possibilities[val - 1]:
-        sc.possibilities[val - 1] = false
-        sc.nb -= 1
+proc empty(sc: SudokuSolverCell): bool = return sc.nb == 0
+proc empty(sg: SudokuSolverGrid): bool =
+   for row in sg:
+      for cell in row:
+         if not cell.empty:
+            return false
+   return true
+
+proc removePossibility(sc: var SudokuSolverCell, val: int) =
+   if sc.possibilities[val - 1]:
+      sc.possibilities[val - 1] = false
+      sc.nb -= 1
+
+proc `+=`(sc1, sc2: var SudokuSolverCell) =
+   for i in 0 ..< 9:
+      if not sc1.possibilities[i] and sc2.possibilities[i]:
+         sc1.possibilities[i] = true
+         sc1.nb += 1
+
+proc `$`(sc: SudokuSolverCell): string =
+   result = ""
+   result &= "nb: " & $sc.nb
+   result &= " ["
+   var nbPossibilitiesShown = 0
+   for i in 0 ..< 9:
+      if sc.possibilities[i]:
+         result &= $(i + 1)
+         nbPossibilitiesShown += 1
+         if nbPossibilitiesShown == sc.nb:
+            break
+         result &= ", "
+   result &= "]"
 
 proc `$`(sg: SudokuSolverGrid): string =
-    result = ""
-    for row in 0 ..< 9:
-        for col in 0 ..< 9:
-            result &= $row & " " & $col
-            result &= " nb: " & $sg[row, col].nb
-            result &= " ["
-            var nbPossibilitiesShown = 0
-            for i in 0 ..< 9:
-                if sg[row, col].possibilities[i]:
-                    result &= $(i + 1)
-                    nbPossibilitiesShown += 1
-                    if nbPossibilitiesShown == sg[row, col].nb:
-                        break
-                    result &= ", "
-            result &= "]"
-            result &= "\n"
+   result = ""
+   for row in 0 ..< 9:
+      for col in 0 ..< 9:
+         result &= "(" & $row & ", " & $col & ") " & $sg[row][col] & "\n"
 
-proc init(sg: var SudokuSolverGrid, grid: SudokuGrid) =
-    for row in 0 ..< 9:
-        for col in 0 ..< 9:
-            if grid[row, col] != 0:
-                sg[row, col].possibilities.fill(false)
-                sg[row, col].nb = 0
+proc init(sg: var SudokuSolverGrid, g: SudokuGrid) =
+   for row in 0 ..< 9:
+      for col in 0 ..< 9:
+         if g[row][col].filled:
+            sg[row][col].possibilities.fill(false)
+            sg[row][col].nb = 0
+         else:
+            sg[row][col].possibilities.fill(true)
+            sg[row][col].nb = 9
+
+            for tmpCol in 0 ..< 9:
+               if g[row][tmpCol].filled:
+                  sg[row][col].removePossibility(g[row][tmpCol])
+            for tmpRow in 0 ..< 9:
+               if g[tmprow][col].filled:
+                  sg[row][col].removePossibility(g[tmpRow][col])
+            for y in 0 ..< 3:
+               for x in 0 ..< 3:
+                  let tmpRow = int(row / 3) * 3 + y
+                  let tmpCol = int(col / 3) * 3 + x
+                  if g[tmpRow][tmpCol].filled:
+                     sg[row][col].removePossibility(g[tmpRow][tmpCol])
+
+proc update(sg: var SudokuSolverGrid, g: SudokuGrid, row, col: int) =
+   for tmpCol in 0 ..< 9:
+      sg[row][tmpCol].removePossibility(g[row][col])
+   for tmpRow in 0 ..< 9:
+      sg[tmpRow][col].removePossibility(g[row][col])
+   for y in 0 ..< 3:
+      for x in 0 ..< 3:
+         let tmpRow = int(row / 3) * 3 + y
+         let tmpCol = int(col / 3) * 3 + x
+         sg[tmpRow][tmpCol].removePossibility(g[row][col])
+
+   sg[row][col].possibilities.fill(false)
+   sg[row][col].nb = 0
+
+proc update(g: var SudokuGrid, sg: var SudokuSolverGrid, row, col, val: int) =
+   g[row][col] = val
+   sg.update(g, row, col)
+
+proc refine(sg: var SudokuSolverGrid, g: SudokuGrid) =
+   for row in 0 ..< 9:
+      var nbFreeCells = 0
+      var cell: SudokuSolverCell
+      cell.possibilities.fill(false)
+      cell.nb = 0
+      for col in 0 ..< 9:
+         if not g[row][col].filled:
+            nbFreeCells += 1
+            cell += sg[row][col]
+
+      if cell.nb == nbFreeCells:
+         var col = 0
+         while col < 9:
+            if not g[row][col].filled:
+               for y in 0 ..< 3:
+                  let tmpRow = int(row / 3) + y
+                  if row != tmpRow:
+                     for x in 0 ..< 3:
+                        let tmpCol = int(col / 3) + x
+                        for i in 0 ..< 9:
+                           if cell.possibilities[i]:
+                              sg[tmpRow][tmpCol].removePossibility(i + 1)
+
+               col = (int(col / 3) + 1) * 3
             else:
-                sg[row, col].possibilities.fill(true)
-                sg[row, col].nb = 9
+               col += 1
 
-                for tmpCol in 0 ..< 9:
-                    if grid[row, tmpCol] != 0:
-                        sg[row, col].remove(grid[row, tmpCol])
-                for tmpRow in 0 ..< 9:
-                    if grid[tmpRow, col] != 0:
-                        sg[row, col].remove(grid[tmpRow, col])
+   for col in 0 ..< 9:
+      var nbFreeCells = 0
+      var cell: SudokuSolverCell
+      cell.possibilities.fill(false)
+      cell.nb = 0
+      for row in 0 ..< 9:
+         if not g[row][col].filled:
+            nbFreeCells += 1
+            cell += sg[row][col]
 
-                let caseX = int(col / 3)
-                let caseY = int(row / 3)
-                for y in 0 ..< 3:
-                    for x in 0 ..< 3:
-                        let tmpRow = caseY * 3 + y
-                        let tmpCol = caseX * 3 + x
-                        if grid[tmpRow, tmpCol] != 0:
-                            sg[row, col].remove(grid[tmpRow, tmpCol])
+      if cell.nb == nbFreeCells:
+         var row = 0
+         while row < 9:
+            if not g[row][col].filled:
+               for x in 0 ..< 3:
+                  let tmpCol = int(col / 3) + x
+                  if col != tmpCol:
+                     for y in 0 ..< 3:
+                        let tmpRow = int(row / 3) + y
+                        for i in 0 ..< 9:
+                           if cell.possibilities[i]:
+                              sg[tmpRow][tmpCol].removePossibility(i + 1)
 
-proc update(sg: var SudokuSolverGrid, grid: SudokuGrid, row, col: int) =
-    for tmpCol in 0 ..< 9:
-        sg[row, tmpCol].remove(grid[row, col])
-    for tmpRow in 0 ..< 9:
-        sg[tmpRow, col].remove(grid[row, col])
+               row = (int(row / 3) + 1) * 3
+            else:
+               row += 1
 
-    let caseX = int(col / 3)
-    let caseY = int(row / 3)
-    for y in 0 ..< 3:
-        for x in 0 ..< 3:
-            let tmpRow = caseY * 3 + y
-            let tmpCol = caseX * 3 + x
-            sg[tmpRow, tmpCol].remove(grid[row, col])
+proc solveNaive*(g: var SudokuGrid, sg: var SudokuSolverGrid) =
+   var canSolve = true
+   while canSolve:
+      canSolve = false
+      for row in 0 ..< 9:
+         for col in 0 ..< 9:
+            if sg[row][col].nb == 1:
+               canSolve = true
+               var possibility = 0
+               for i in 0 ..< 9:
+                  if sg[row][col].possibilities[i]:
+                     possibility = i + 1
+                     break
+               g.update(sg, row, col, possibility)
 
-    sg[row, col].possibilities[grid[row, col] - 1] = false
-    sg[row, col].nb = 0
+proc solve(g: var SudokuGrid, sg: var SudokuSolverGrid) =
+   var maxIter = 1
+   var iter = 0
+   while true:
+      g.solveNaive(sg)
+      if g.full or sg.empty:
+         break
 
-proc solveNaive*(grid: var SudokuGrid, sg: var SudokuSolverGrid): bool =
-    result = true
-    while result:
-        result = false
-        for row in 0 ..< 9:
-            for col in 0 ..< 9:
-                if sg[row, col].nb == 1:
-                    result = true
-                    var possibility = 0
-                    for i in 0 ..< 9:
-                        if sg[row, col].possibilities[i]:
-                            possibility = i + 1
-                            break
-                    grid[row, col] = possibility
-                    sg.update(grid, row, col)
+      sg.refine(g)
+      echo sg
+
+      iter += 1
+      if iter >= maxIter:
+         break
 
 proc solve*(g: var SudokuGrid) =
-    var sg: SudokuSolverGrid
-    sg.init(g)
-    discard g.solveNaive(sg)
-    if not g.completed:
-        var g2: SudokuGrid = g
-        var sg2: SudokuSolverGrid = sg
-        g2[1, 3] = 1
-        sg2.update(g2, 1, 3)
-        discard g2.solveNaive(sg2)
-        echo g2
-        echo sg2
+   var sg: SudokuSolverGrid
+   sg.init(g)
+   g.solve(sg)
 
 proc main*() =
-    # const soluceGrid: SudokuGrid = [
-    #     2, 9, 4, 6, 7, 3, 1, 5, 8,
-    #     3, 6, 7, 5, 1, 8, 9, 4, 2,
-    #     8, 5, 1, 2, 4, 9, 6, 3, 7,
-    #     4, 2, 9, 8, 6, 7, 3, 1, 5,
-    #     1, 7, 6, 3, 2, 5, 8, 9, 4,
-    #     5, 8, 3, 1, 9, 4, 7, 2, 6,
-    #     6, 3, 8, 9, 5, 2, 4, 7, 1,
-    #     7, 1, 2, 4, 3, 6, 5, 8, 9,
-    #     9, 4, 5, 7, 8, 1, 2, 6, 3
-    # ]
+   # var grid: SudokuGrid = [
+   #    0, 0, 4, 0, 7, 3, 0, 5, 0,
+   #    3, 6, 0, 0, 0, 8, 9, 0, 0,
+   #    8, 5, 1, 2, 0, 0, 0, 3, 0,
+   #    4, 0, 9, 8, 6, 7, 3, 0, 0,
+   #    1, 0, 0, 0, 0, 5, 0, 0, 0,
+   #    0, 8, 0, 1, 9, 0, 7, 0, 0,
+   #    0, 0, 0, 9, 0, 2, 0, 7, 1,
+   #    0, 1, 2, 0, 0, 6, 0, 8, 0,
+   #    9, 0, 5, 7, 8, 1, 2, 6, 0
+   # ]
 
-    # var grid: SudokuGrid = [
-    #     0, 0, 4, 0, 7, 3, 0, 5, 0,
-    #     3, 6, 0, 0, 0, 8, 9, 0, 0,
-    #     8, 5, 1, 2, 0, 0, 0, 3, 0,
-    #     4, 0, 9, 8, 6, 7, 3, 0, 0,
-    #     1, 0, 0, 0, 0, 5, 0, 0, 0,
-    #     0, 8, 0, 1, 9, 0, 7, 0, 0,
-    #     0, 0, 0, 9, 0, 2, 0, 7, 1,
-    #     0, 1, 2, 0, 0, 6, 0, 8, 0,
-    #     9, 0, 5, 7, 8, 1, 2, 6, 0
-    # ]
+   # var grid: SudokuGrid = [
+   #    0, 7, 6, 0, 0, 0, 0, 8, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    4, 0, 0, 0, 5, 8, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 3, 0, 0, 0,
+   #    0, 0, 1, 2, 0, 6, 7, 0, 0,
+   #    0, 8, 0, 1, 9, 4, 2, 0, 3,
+   #    7, 6, 0, 0, 0, 0, 8, 0, 0,
+   #    0, 0, 3, 8, 0, 7, 1, 9, 2,
+   #    0, 0, 0, 0, 4, 0, 0, 0, 6
+   # ]
 
-    # var grid: SudokuGrid = [
-    #     0, 7, 6, 0, 0, 0, 0, 8, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     4, 0, 0, 0, 5, 8, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 3, 0, 0, 0,
-    #     0, 0, 1, 2, 0, 6, 7, 0, 0,
-    #     0, 8, 0, 1, 9, 4, 2, 0, 3,
-    #     7, 6, 0, 0, 0, 0, 8, 0, 0,
-    #     0, 0, 3, 8, 0, 7, 1, 9, 2,
-    #     0, 0, 0, 0, 4, 0, 0, 0, 6
-    # ]
+   # var grid: SudokuGrid = [
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0,
+   #    0, 0, 0, 0, 0, 0, 0, 0, 0
+   # ]
 
-    # var grid: SudokuGrid = [
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0
-    # ]
+   # Easy
+   # var grid: SudokuGrid = [
+   #    [0, 0, 0, 2, 6, 0, 7, 0, 1],
+   #    [6, 8, 0, 0, 7, 0, 0, 9, 0],
+   #    [1, 9, 0, 0, 0, 4, 5, 0, 0],
+   #    [8, 2, 0, 1, 0, 0, 0, 4, 0],
+   #    [0, 0, 4, 6, 0, 2, 9, 0, 0],
+   #    [0, 5, 0, 0, 0, 3, 0, 2, 8],
+   #    [0, 0, 9, 3, 0, 0, 0, 7, 4],
+   #    [0, 4, 0, 0, 5, 0, 0, 3, 6],
+   #    [7, 0, 3, 0, 1, 8, 0, 0, 0]
+   # ]
 
-    # Easy
-    # var grid: SudokuGrid = [
-    #     0, 0, 0, 2, 6, 0, 7, 0, 1,
-    #     6, 8, 0, 0, 7, 0, 0, 9, 0,
-    #     1, 9, 0, 0, 0, 4, 5, 0, 0,
-    #     8, 2, 0, 1, 0, 0, 0, 4, 0,
-    #     0, 0, 4, 6, 0, 2, 9, 0, 0,
-    #     0, 5, 0, 0, 0, 3, 0, 2, 8,
-    #     0, 0, 9, 3, 0, 0, 0, 7, 4,
-    #     0, 4, 0, 0, 5, 0, 0, 3, 6,
-    #     7, 0, 3, 0, 1, 8, 0, 0, 0
-    # ]
+   # Intermediate
+   var grid: SudokuGrid = [
+      [0, 2, 0, 6, 0, 8, 0, 0, 0],
+      [5, 8, 0, 0, 0, 9, 7, 0, 0],
+      [0, 0, 0, 0, 4, 0, 0, 0, 0],
+      [3, 7, 0, 0, 0, 0, 5, 0, 0],
+      [6, 0, 0, 0, 0, 0, 0, 0, 4],
+      [0, 0, 8, 0, 0, 0, 0, 1, 3],
+      [0, 0, 0, 0, 2, 0, 0, 0, 0],
+      [0, 0, 9, 8, 0, 0, 0, 3, 6],
+      [0, 0, 0, 3, 0, 6, 0, 9, 0]
+   ]
 
-    # Intermediate
-    var grid: SudokuGrid = [
-        0, 2, 0, 6, 0, 8, 0, 0, 0,
-        5, 8, 0, 0, 0, 9, 7, 0, 0,
-        0, 0, 0, 0, 4, 0, 0, 0, 0,
-        3, 7, 0, 0, 0, 0, 5, 0, 0,
-        6, 0, 0, 0, 0, 0, 0, 0, 4,
-        0, 0, 8, 0, 0, 0, 0, 1, 3,
-        0, 0, 0, 0, 2, 0, 0, 0, 0,
-        0, 0, 9, 8, 0, 0, 0, 3, 6,
-        0, 0, 0, 3, 0, 6, 0, 9, 0
-    ]
+   # Hard
+   # var grid: SudokuGrid = [
+   #    [0, 0, 0, 6, 0, 0, 4, 0, 0],
+   #    [7, 0, 0, 0, 0, 3, 6, 0, 0],
+   #    [0, 0, 0, 0, 9, 1, 0, 8, 0],
+   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+   #    [0, 5, 0, 1, 8, 0, 0, 0, 3],
+   #    [0, 0, 0, 3, 0, 6, 0, 4, 5],
+   #    [0, 4, 0, 2, 0, 0, 0, 6, 0],
+   #    [9, 0, 3, 0, 0, 0, 0, 0, 0],
+   #    [0, 2, 0, 0, 0, 0, 1, 0, 0]
+   # ]
 
-    # Hard
-    # var grid: SudokuGrid = [
-    #     0, 0, 0, 6, 0, 0, 4, 0, 0,
-    #     7, 0, 0, 0, 0, 3, 6, 0, 0,
-    #     0, 0, 0, 0, 9, 1, 0, 8, 0,
-    #     0, 0, 0, 0, 0, 0, 0, 0, 0,
-    #     0, 5, 0, 1, 8, 0, 0, 0, 3,
-    #     0, 0, 0, 3, 0, 6, 0, 4, 5,
-    #     0, 4, 0, 2, 0, 0, 0, 6, 0,
-    #     9, 0, 3, 0, 0, 0, 0, 0, 0,
-    #     0, 2, 0, 0, 0, 0, 1, 0, 0
-    # ]
+   echo(grid)
 
-    grid.solve()
+   grid.solve()
 
-    echo(grid)
+   echo(grid)
 
 main()
