@@ -9,14 +9,32 @@ type
 
 proc y*(p: Pos): int = return p[0]
 proc x*(p: Pos): int = return p[1]
+proc `y=`*(p: var Pos, v: int) = p[0] = v
+proc `x=`*(p: var Pos, v: int) = p[1] = v
 
-proc `[]`*(g: SudokuGrid, y, x: int): SudokuCell = return g[y][x]
-proc `[]`*(g: var SudokuGrid, y, x: int): var SudokuCell = return g[y][x]
-proc `[]=`*(g: var SudokuGrid, y, x: int, c: SudokuCell) = g[y][x] = c
+proc outOfBounds*(p: Pos): bool =
+   return p.x < 0 or p.x >= 9 or p.y < 0 or p.y >= 9
 
-proc `[]`*(g: SudokuGrid, p: Pos): SudokuCell = return g[p.y][p.x]
-proc `[]`*(g: var SudokuGrid, p: Pos): var SudokuCell = return g[p.y][p.x]
-proc `[]=`*(g: var SudokuGrid, p: Pos, c: SudokuCell) = g[p.y][p.x] = c
+proc next*(p: var Pos) =
+   if p.x >= 8:
+      p.y = p.y + 1
+      p.x = 0
+   else:
+      p.x = p.x + 1
+proc prev*(p: var Pos) =
+   if p.x <= 0:
+      p.y = p.y - 1
+      p.x = 8
+   else:
+      p.x = p.x - 1
+
+proc `[]`*[T](g: array[9, array[9, T]], y, x: int): T = return g[y][x]
+proc `[]`*[T](g: var array[9, array[9, T]], y, x: int): var T = return g[y][x]
+proc `[]=`*[T](g: var array[9, array[9, T]], y, x: int, v: T) = g[y][x] = v
+
+proc `[]`*[T](g: array[9, array[9, T]], p: Pos): T = return g[p.y][p.x]
+proc `[]`*[T](g: var array[9, array[9, T]], p: Pos): var T = return g[p.y][p.x]
+proc `[]=`*[T](g: var array[9, array[9, T]], p: Pos, v: T) = g[p.y][p.x] = v
 
 iterator gridPos*(): Pos =
    for y in 0 ..< 9:
@@ -56,11 +74,11 @@ iterator fromTo*(p1, p2: Pos): Pos =
       for x in p1.x .. p2.x:
          yield Pos([y, x])
 
-proc `[]`*(g: SudokuGrid, p1, p2: Pos): seq[SudokuCell] =
+proc `[]`*[T](g: array[9, array[9, T]], p1, p2: Pos): seq[T] =
    result = @[]
    for p in fromTo(p1, p2):
       result.add(g[p])
-proc `[]`*(g: var SudokuGrid, p1, p2: Pos): seq[var SudokuCell] =
+proc `[]`*[T](g: var array[9, array[9, T]], p1, p2: Pos): seq[T] =
    result = @[]
    for p in fromTo(p1, p2):
       result.add(g[p])
@@ -196,12 +214,57 @@ proc fill(g: var SudokuGrid, p: Pos, v: int) =
 
 proc createSudokuGrid*(m: array[9, array[9, int]]): SudokuGrid =
    for p in gridPos():
-      if m[p.y][p.x] == 0:
+      if m[p] == 0:
          result[p] = @[1, 2, 3, 4, 5, 6, 7, 8, 9]
       else:
-         result[p] = @[m[p.y][p.x]]
+         result[p] = @[m[p]]
 
-proc solve*(g: var SudokuGrid) =
+# TODO remove dynamic allocation
+proc solveWithBacktracing*(g: var SudokuGrid) =
+   for p in gridPos():
+      if g[p].filled:
+         g.onFilled(p)
+
+   var indices: array[9, array[9, int]]
+   for p in gridPos():
+      indices[p] = 0
+
+   let originalGrid = deepCopy(g)
+
+   var p = Pos([0, 0])
+   while not p.outOfBounds:
+      if not g[p].filled:
+         let v = originalGrid[p][indices[p]]
+         var invalid = false
+         for pp in rowColCasePos(p):
+            if pp != p and g[pp].filled and g[pp][0] == v:
+               invalid = true
+               break
+
+         if invalid:
+            while true:
+               if indices[p] < len(originalGrid[p]) - 1:
+                  indices[p] += 1
+                  break
+               else:
+                  indices[p] = 0
+                  g[p] = originalGrid[p]
+
+                  while true:
+                     p.prev()
+                     if p.outOfBounds:
+                        return
+                     if not originalGrid[p].filled:
+                        g[p] = originalGrid[p]
+                        break
+
+         else:
+            g[p] = @[v]
+            p.next()
+      else:
+         p.next()
+
+proc solveWithConstraint*(g: var SudokuGrid) =
    for p in gridPos():
       if g[p].filled:
          g.onFilled(p)
@@ -210,8 +273,7 @@ proc solve*(g: var SudokuGrid) =
 
    var nbIters = 0
    while true:
-      # Cannot use let here: https://forum.nim-lang.org/t/3663
-      var gCopy = g
+      let gCopy = deepCopy(g)
 
       inc(nbIters)
       echo "Iter num " & $nbIters
