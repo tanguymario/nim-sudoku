@@ -219,51 +219,6 @@ proc createSudokuGrid*(m: array[9, array[9, int]]): SudokuGrid =
       else:
          result[p] = @[m[p]]
 
-# TODO remove dynamic allocation
-proc solveWithBacktracing*(g: var SudokuGrid) =
-   for p in gridPos():
-      if g[p].filled:
-         g.onFilled(p)
-
-   var indices: array[9, array[9, int]]
-   for p in gridPos():
-      indices[p] = 0
-
-   let originalGrid = deepCopy(g)
-
-   var p = Pos([0, 0])
-   while not p.outOfBounds:
-      if not g[p].filled:
-         let v = originalGrid[p][indices[p]]
-         var invalid = false
-         for pp in rowColCasePos(p):
-            if pp != p and g[pp].filled and g[pp][0] == v:
-               invalid = true
-               break
-
-         if invalid:
-            while true:
-               if indices[p] < len(originalGrid[p]) - 1:
-                  indices[p] += 1
-                  break
-               else:
-                  indices[p] = 0
-                  g[p] = originalGrid[p]
-
-                  while true:
-                     p.prev()
-                     if p.outOfBounds:
-                        return
-                     if not originalGrid[p].filled:
-                        g[p] = originalGrid[p]
-                        break
-
-         else:
-            g[p] = @[v]
-            p.next()
-      else:
-         p.next()
-
 proc solveWithConstraint*(g: var SudokuGrid) =
    for p in gridPos():
       if g[p].filled:
@@ -292,3 +247,58 @@ proc solveWithConstraint*(g: var SudokuGrid) =
    echo "Number of iterations: " & $nbIters
    echo "Grid is " & (if g.full: "full" else: "not full")
    # echo debug(g)
+
+## Backtracing
+
+proc solveWithBacktracing*(g: var SudokuGrid) =
+   for p in gridPos():
+      if g[p].filled:
+         g.onFilled(p)
+
+   var indices: array[9, array[9, int]]
+   for p in gridPos():
+      indices[p] = 0
+
+   let originalGrid = deepCopy(g)
+
+   var filled: array[9, array[9, bool]]
+   for p in gridPos():
+      filled[p] = g[p].filled
+      if not filled[p]:
+         g[p].setLen(1)
+
+   var p = Pos([0, 0])
+   while not p.outOfBounds:
+      if not filled[p]:
+         let v = originalGrid[p][indices[p]]
+         var invalid = false
+         for pp in rowColCasePos(p):
+            if pp != p and filled[pp] and g[pp][0] == v:
+               invalid = true
+               break
+
+         if invalid:
+            while true:
+               if indices[p] < len(originalGrid[p]) - 1:
+                  indices[p] += 1
+                  break
+               else:
+                  indices[p] = 0
+                  filled[p] = false
+
+                  while true:
+                     p.prev()
+                     if p.outOfBounds:
+                        return
+                     if not originalGrid[p].filled:
+                        filled[p] = false
+                        break
+
+         else:
+            g[p][0] = v
+            filled[p] = true
+            p.next()
+      else:
+         p.next()
+
+## Constraint Programming
