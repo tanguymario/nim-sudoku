@@ -3,11 +3,16 @@ import sequtils
 type
    Pos* = array[2, int]
 
+   # TODO maybe change to set
    SudokuCell* = seq[int]
    SudokuGrid* = array[9, array[9, SudokuCell]]
 
 proc y*(p: Pos): int = return p[0]
 proc x*(p: Pos): int = return p[1]
+
+proc `[]`*(g: SudokuGrid, y, x: int): SudokuCell = return g[y][x]
+proc `[]`*(g: var SudokuGrid, y, x: int): var SudokuCell = return g[y][x]
+proc `[]=`*(g: var SudokuGrid, y, x: int, c: SudokuCell) = g[y][x] = c
 
 proc `[]`*(g: SudokuGrid, p: Pos): SudokuCell = return g[p.y][p.x]
 proc `[]`*(g: var SudokuGrid, p: Pos): var SudokuCell = return g[p.y][p.x]
@@ -45,6 +50,20 @@ iterator rowColCasePos*(p: Pos): Pos =
       yield cp
    for caseP in casePos(p):
       yield caseP
+
+iterator fromTo*(p1, p2: Pos): Pos =
+   for y in p1.y .. p2.y:
+      for x in p1.x .. p2.x:
+         yield Pos([y, x])
+
+proc `[]`*(g: SudokuGrid, p1, p2: Pos): seq[SudokuCell] =
+   result = @[]
+   for p in fromTo(p1, p2):
+      result.add(g[p])
+proc `[]`*(g: var SudokuGrid, p1, p2: Pos): seq[var SudokuCell] =
+   result = @[]
+   for p in fromTo(p1, p2):
+      result.add(g[p])
 
 proc filled*(c: SudokuCell): bool = return len(c) == 1
 proc filled*(c: SudokuCell, v: int): bool =
@@ -105,10 +124,63 @@ proc debug*(g: SudokuGrid): string =
    for p in gridPos():
       result &= $p & " " & $g[p] & "\n"
 
+proc removePossibility(g: var SudokuGrid, p: Pos, v: int)
+proc checkForcedDigit(g: var SudokuGrid, p: Pos, v: int)
+proc checkForcedPairs(g: var SudokuGrid)
 proc onFilled(g: var SudokuGrid, p: Pos)
+proc fill(g: var SudokuGrid, p: Pos, v: int)
+
+proc checkForcedDigit(g: var SudokuGrid, p: Pos, v: int) =
+   var caseConnectedPos: array[3, seq[Pos]]
+   caseConnectedPos[0] = toSeq(rowPos(p.y))
+   caseConnectedPos[1] = toSeq(colPos(p.x))
+   caseConnectedPos[2] = toSeq(casePos(p))
+   for i in 0 ..< 3:
+      let possiblePos = g.possiblePosAt(caseConnectedPos[i], v)
+      if len(possiblePos) == 1:
+         g.fill(possiblePos[0], v)
+
+# https://homepages.cwi.nl/~aeb/games/sudoku/solving5.html
+proc checkForcedPairs(g: var SudokuGrid) =
+   for c in cases():
+      for v in 1 .. 9:
+         let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
+         if len(possiblePos) == 0:
+            continue
+
+         var rowsPossible = [false, false, false]
+         var colsPossible = [false, false, false]
+         for p in possiblePos:
+            rowsPossible[p.y - c.y] = true
+            colsPossible[p.x - c.x] = true
+
+         if rowsPossible.count(true) == 1:
+            for p in rowPos(c.y + rowsPossible.find(true)):
+               if p.x < c.x or p.x > c.x + 3:
+                  g.removePossibility(p, v)
+         elif colsPossible.count(true) == 1:
+            for p in colPos(c.x + colsPossible.find(true)):
+               if p.y < c.y or p.y > c.y + 3:
+                  g.removePossibility(p, v)
+
+# https://homepages.cwi.nl/~aeb/games/sudoku/solving6.html
+proc checkTwoPairs(g: var SudokuGrid) =
+   for v in 1 .. 9:
+      for caseY in 0 ..< 3:
+         var possibilities: array[3, seq[Pos]]
+         for caseX in 0 ..< 3:
+            possibilities[caseX] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
+         # TODO
+      for caseX in 0 ..< 3:
+         var possibilities: array[3, seq[Pos]]
+         for caseY in 0 ..< 3:
+            possibilities[caseY] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
+         # TODO
+
 proc removePossibility(g: var SudokuGrid, p: Pos, v: int) =
    let idx = g[p].find(v)
    if idx >= 0:
+      echo $p & ": removed " & $v
       g[p].del(idx)
       if g[p].filled:
          g.onFilled(p)
@@ -136,49 +208,25 @@ proc solve*(g: var SudokuGrid) =
 
    # echo debug(g)
 
-   var maxIters = 10
-   var iter = 0
-   while iter < maxIters:
-      for c in cases():
+   var nbIters = 0
+   while true:
+      # Cannot use let here: https://forum.nim-lang.org/t/3663
+      var gCopy = g
+
+      inc(nbIters)
+      echo "Iter num " & $nbIters
+
+      for p in gridPos():
          for v in 1 .. 9:
-            let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
-            if len(possiblePos) > 0 and len(possiblePos) <= 3:
-               var iSameRow = possiblePos[0].y
-               var iSameCol = possiblePos[0].x
-               for pp in possiblePos:
-                  if pp.x != possiblePos[0].x:
-                     iSameCol = -1
-                  if pp.y != possiblePos[0].y:
-                     iSameRow = -1
-               if iSameRow > 0:
-                  for rp in rowPos(iSameRow):
-                     # echo (rp, v)
-                     if rp notin possiblePos and not g[rp].filled:
-                        # if g[rp].isPossible(v):
-                           # echo (rp, v)
-                        g.removePossibility(rp, v)
-               elif iSameCol > 0:
-                  for cp in colPos(iSameCol):
-                     # echo (cp, v)
-                     if cp notin possiblePos and not g[cp].filled:
-                        # if g[cp].isPossible(v):
-                           # echo (cp, v)
-                        g.removePossibility(cp, v)
+            g.checkForcedDigit(p, v)
 
-      for v in 1 .. 9:
-         for y in 0 ..< 9:
-            let possiblePos = g.possiblePosAt(toSeq(rowPos(y)), v)
-            if len(possiblePos) == 1:
-               g.fill(possiblePos[0], v)
-         for x in 0 ..< 9:
-            let possiblePos = g.possiblePosAt(toSeq(rowPos(x)), v)
-            if len(possiblePos) == 1:
-               g.fill(possiblePos[0], v)
-         for c in cases():
-            let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
-            if len(possiblePos) == 1:
-               g.fill(possiblePos[0], v)
+      g.checkForcedPairs()
 
-      inc(iter)
+      g.checkTwoPairs()
 
+      if g == gCopy:
+         break
+
+   echo "Number of iterations: " & $nbIters
+   echo "Grid is " & (if g.full: "full" else: "not full")
    # echo debug(g)
