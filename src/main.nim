@@ -5,15 +5,13 @@ import times
 import sudoku
 import sudokuBacktracing
 import sudokuConstraintProgramming
-import sudokuStochasticSearch
 
 const version = 0.1
 
 type
    SolvingSolution* = enum
       ConstraintProgramming,
-      Backtracing,
-      StochasticProgramming
+      Backtracing
 
    CmdOpt = object
       showHelp: bool
@@ -49,7 +47,6 @@ Options:
   --version                     Show version
   --solveBacktracing            Solve the sudoku with backtracing
   --solveConstraintProgramming  Solve the sudoku with constraint programming
-  --solveStochasticSearch       Solve the sudoku with stochastic search
   --showGrids                   Show sudoku grids
   -o --outputFile=[string]      Write result sudoku in the given file path
   --showTime                    Show solving time
@@ -83,9 +80,6 @@ proc main() =
          of "solveBacktracing":
             cmdOpt.solvingSolution = SolvingSolution.Backtracing
             cmdOpt.solve = true
-         of "solveStochasticSearch":
-            cmdOpt.solvingSolution = SolvingSolution.StochasticProgramming
-            cmdOpt.solve = true
          of "showTime": cmdOpt.showTime = true
          of "checkWith": cmdOpt.solutionGridFilePath = val
       of cmdEnd: assert(false)
@@ -111,8 +105,6 @@ proc main() =
                grid.solveWithConstraintProgramming()
             of SolvingSolution.Backtracing:
                grid.solveWithBacktracing()
-            of SolvingSolution.StochasticProgramming:
-               grid.solveWithStochasticSearch()
 
          let duration = cpuTime() - startTime
 
