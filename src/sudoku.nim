@@ -1,15 +1,10 @@
-import sequtils
 import strutils
 
 type
    Pos* = array[2, int]
 
-   # TODO maybe change to set
-   SudokuCell* = seq[int]
+   SudokuCell* = int
    SudokuGrid* = array[9, array[9, SudokuCell]]
-
-   SolvingSolution* = enum
-      Backtracing, ConstraintProgramming
 
 proc y*(p: Pos): int = return p[0]
 proc x*(p: Pos): int = return p[1]
@@ -87,12 +82,8 @@ proc `[]`*[T](g: var array[9, array[9, T]], p1, p2: Pos): seq[T] =
    for p in fromTo(p1, p2):
       result.add(g[p])
 
-proc filled*(c: SudokuCell): bool = return len(c) == 1
-proc filled*(c: SudokuCell, v: int): bool =
-   return c.filled and c[0] == v
-
-proc isPossible*(c: SudokuCell, v: int): bool =
-   return not c.filled and c.contains(v)
+proc filled*(c: SudokuCell): bool = return c != 0
+proc filled*(c, v: SudokuCell): bool = return c == v
 
 proc filledAt*(g: SudokuGrid, pos: openArray[Pos]): bool =
    for p in pos:
@@ -100,22 +91,11 @@ proc filledAt*(g: SudokuGrid, pos: openArray[Pos]): bool =
          return true
    return false
 
-proc filledAt*(g: SudokuGrid, pos: openArray[Pos], v: int): bool =
+proc filledAt*(g: SudokuGrid, pos: openArray[Pos], v: SudokuCell): bool =
    for p in pos:
       if g[p].filled(v):
          return true
    return false
-
-proc isPossibleAt*(g: SudokuGrid, pos: openArray[Pos], v: int): bool =
-   for p in pos:
-      if g[p].isPossible(v):
-         return true
-   return false
-
-proc possiblePosAt*(g: SudokuGrid, pos: openArray[Pos], v: int): seq[Pos] =
-   for p in pos:
-      if g[p].isPossible(v):
-         result.add(p)
 
 proc full*(g: SudokuGrid): bool =
    for p in gridPos():
@@ -137,186 +117,16 @@ proc `$`*(g: SudokuGrid): string =
          result &= "╠═══════╬═══════╬═══════╣\n"
       result &= "║ "
       for x in 0 ..< 9:
-         result &= (if g[y][x].filled: $g[y][x][0] else: " ")
+         result &= (if g[y, x].filled: $g[y, x] else: " ")
          result &= (if (x + 1) mod 3 == 0: " ║ " else: " ")
       result &= "\n"
    result &= "╚═══════╩═══════╩═══════╝\n"
 
-proc debug*(g: SudokuGrid): string =
+proc createSudokuGrid*(m: array[9, array[9, SudokuCell]]): SudokuGrid =
    for p in gridPos():
-      result &= $p & " " & $g[p] & "\n"
-
-proc removePossibility(g: var SudokuGrid, p: Pos, v: int)
-proc checkForcedDigit(g: var SudokuGrid, p: Pos, v: int)
-proc checkForcedPairs(g: var SudokuGrid)
-proc onFilled(g: var SudokuGrid, p: Pos)
-proc fill(g: var SudokuGrid, p: Pos, v: int)
-
-proc checkForcedDigit(g: var SudokuGrid, p: Pos, v: int) =
-   var caseConnectedPos: array[3, seq[Pos]]
-   caseConnectedPos[0] = toSeq(rowPos(p.y))
-   caseConnectedPos[1] = toSeq(colPos(p.x))
-   caseConnectedPos[2] = toSeq(casePos(p))
-   for i in 0 ..< 3:
-      let possiblePos = g.possiblePosAt(caseConnectedPos[i], v)
-      if len(possiblePos) == 1:
-         g.fill(possiblePos[0], v)
-
-# https://homepages.cwi.nl/~aeb/games/sudoku/solving5.html
-proc checkForcedPairs(g: var SudokuGrid) =
-   for c in gridCases():
-      for v in 1 .. 9:
-         let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
-         if len(possiblePos) == 0:
-            continue
-
-         var rowsPossible = [false, false, false]
-         var colsPossible = [false, false, false]
-         for p in possiblePos:
-            rowsPossible[p.y - c.y] = true
-            colsPossible[p.x - c.x] = true
-
-         if rowsPossible.count(true) == 1:
-            for p in rowPos(c.y + rowsPossible.find(true)):
-               if p.x < c.x or p.x > c.x + 3:
-                  g.removePossibility(p, v)
-         elif colsPossible.count(true) == 1:
-            for p in colPos(c.x + colsPossible.find(true)):
-               if p.y < c.y or p.y > c.y + 3:
-                  g.removePossibility(p, v)
-
-# https://homepages.cwi.nl/~aeb/games/sudoku/solving6.html
-proc checkTwoPairs(g: var SudokuGrid) =
-   for v in 1 .. 9:
-      for caseY in 0 ..< 3:
-         var possibilities: array[3, seq[Pos]]
-         for caseX in 0 ..< 3:
-            possibilities[caseX] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
-         # TODO
-      for caseX in 0 ..< 3:
-         var possibilities: array[3, seq[Pos]]
-         for caseY in 0 ..< 3:
-            possibilities[caseY] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
-         # TODO
-
-proc removePossibility(g: var SudokuGrid, p: Pos, v: int) =
-   let idx = g[p].find(v)
-   if idx >= 0:
-      # echo $p & ": removed " & $v
-      g[p].del(idx)
-      if g[p].filled:
-         g.onFilled(p)
-
-proc onFilled(g: var SudokuGrid, p: Pos) =
-   for pp in rowColCasePos(p):
-      if p != pp:
-         g.removePossibility(pp, g[p][0])
-
-proc fill(g: var SudokuGrid, p: Pos, v: int) =
-   g[p] = @[v]
-   g.onFilled(p)
-
-proc initSudokuGridValue(g: var SudokuGrid, p: Pos, v: int) =
-   if v == 0:
-      g[p] = @[1, 2, 3, 4, 5, 6, 7, 8, 9]
-   else:
-      g[p] = @[v]
-
-proc createSudokuGrid*(m: array[9, array[9, int]]): SudokuGrid =
-   for p in gridPos():
-      result.initSudokuGridValue(p, m[p])
+      result[p] = m[p]
 
 proc createSudokuGrid*(filePath: string): SudokuGrid =
    let gridStr = readFile(filePath).split({'\n', ' '})
    for p in gridPos():
-      result.initSudokuGridValue(p, parseInt(gridStr[p.y * 9 + p.x]))
-
-proc solveWithConstraintProgramming*(g: var SudokuGrid) =
-   for p in gridPos():
-      if g[p].filled:
-         g.onFilled(p)
-
-   # echo debug(g)
-
-   var nbIters = 0
-   while true:
-      let gCopy = deepCopy(g)
-
-      inc(nbIters)
-      echo "Iter num " & $nbIters
-
-      for p in gridPos():
-         for v in 1 .. 9:
-            g.checkForcedDigit(p, v)
-
-      g.checkForcedPairs()
-
-      g.checkTwoPairs()
-
-      if g == gCopy:
-         break
-
-   echo "Number of iterations: " & $nbIters
-   echo "Grid is " & (if g.full: "full" else: "not full")
-   # echo debug(g)
-
-## Backtracing
-
-proc solveWithBacktracing*(g: var SudokuGrid) =
-   # Get grid constraints first
-   for p in gridPos():
-      if g[p].filled:
-         g.onFilled(p)
-
-   let originalGrid = deepCopy(g)
-
-   var indices: array[9, array[9, int]]
-   for p in gridPos():
-      indices[p] = 0
-
-   var filled: array[9, array[9, bool]]
-   for p in gridPos():
-      filled[p] = g[p].filled
-      if not filled[p]:
-         g[p].setLen(1)
-
-   var p = Pos([0, 0])
-   while not p.outOfBounds:
-      if not filled[p]:
-         let v = originalGrid[p][indices[p]]
-         var invalid = false
-         for pp in rowColCasePos(p):
-            if pp != p and filled[pp] and g[pp][0] == v:
-               invalid = true
-               break
-
-         if invalid:
-            while true:
-               if indices[p] < len(originalGrid[p]) - 1:
-                  indices[p] += 1
-                  break
-               else:
-                  indices[p] = 0
-                  filled[p] = false
-
-                  while true:
-                     p.prev()
-                     if p.outOfBounds:
-                        return
-                     if not originalGrid[p].filled:
-                        filled[p] = false
-                        break
-
-         else:
-            g[p][0] = v
-            filled[p] = true
-            p.next()
-      else:
-         p.next()
-
-## Constraint Programming
-
-proc solve*(g: var SudokuGrid, solvingSolution: SolvingSolution) =
-   case solvingSolution:
-   of SolvingSolution.Backtracing: g.solveWithBacktracing()
-   of SolvingSolution.ConstraintProgramming: g.solveWithConstraintProgramming()
+      result[p] = parseInt(gridStr[p.y * 9 + p.x])

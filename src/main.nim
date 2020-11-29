@@ -1,11 +1,17 @@
-import sudoku
 import parseopt
 import strutils
 import times
 
+import sudoku
+import sudokuBacktracing
+import sudokuConstraintProgramming
+
 const version = 0.1
 
 type
+   SolvingSolution* = enum
+      Backtracing, ConstraintProgramming
+
    CmdOpt = object
       showHelp: bool
       showVersion: bool
@@ -92,7 +98,13 @@ proc main() =
 
       if cmdOpt.solve:
          let startTime = cpuTime()
-         grid.solve(cmdOpt.solvingSolution)
+
+         case cmdOpt.solvingSolution:
+            of SolvingSolution.Backtracing:
+               grid.solveWithBacktracing()
+            of SolvingSolution.ConstraintProgramming:
+               grid.solveWithConstraintProgramming()
+
          let duration = cpuTime() - startTime
 
          if cmdOpt.showGrids:
