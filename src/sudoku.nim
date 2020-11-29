@@ -1,4 +1,5 @@
 import sequtils
+import strutils
 
 type
    Pos* = array[2, int]
@@ -6,6 +7,9 @@ type
    # TODO maybe change to set
    SudokuCell* = seq[int]
    SudokuGrid* = array[9, array[9, SudokuCell]]
+
+   SolvingSolution* = enum
+      Backtracing, ConstraintProgramming
 
 proc y*(p: Pos): int = return p[0]
 proc x*(p: Pos): int = return p[1]
@@ -41,7 +45,7 @@ iterator gridPos*(): Pos =
       for x in  0 ..< 9:
          yield Pos([y, x])
 
-iterator cases*(): Pos =
+iterator gridCases*(): Pos =
    for y in 0 ..< 3:
       for x in 0 ..< 3:
          yield Pos([y * 3, x * 3])
@@ -160,7 +164,7 @@ proc checkForcedDigit(g: var SudokuGrid, p: Pos, v: int) =
 
 # https://homepages.cwi.nl/~aeb/games/sudoku/solving5.html
 proc checkForcedPairs(g: var SudokuGrid) =
-   for c in cases():
+   for c in gridCases():
       for v in 1 .. 9:
          let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
          if len(possiblePos) == 0:
@@ -198,7 +202,7 @@ proc checkTwoPairs(g: var SudokuGrid) =
 proc removePossibility(g: var SudokuGrid, p: Pos, v: int) =
    let idx = g[p].find(v)
    if idx >= 0:
-      echo $p & ": removed " & $v
+      # echo $p & ": removed " & $v
       g[p].del(idx)
       if g[p].filled:
          g.onFilled(p)
@@ -212,14 +216,22 @@ proc fill(g: var SudokuGrid, p: Pos, v: int) =
    g[p] = @[v]
    g.onFilled(p)
 
+proc initSudokuGridValue(g: var SudokuGrid, p: Pos, v: int) =
+   if v == 0:
+      g[p] = @[1, 2, 3, 4, 5, 6, 7, 8, 9]
+   else:
+      g[p] = @[v]
+
 proc createSudokuGrid*(m: array[9, array[9, int]]): SudokuGrid =
    for p in gridPos():
-      if m[p] == 0:
-         result[p] = @[1, 2, 3, 4, 5, 6, 7, 8, 9]
-      else:
-         result[p] = @[m[p]]
+      result.initSudokuGridValue(p, m[p])
 
-proc solveWithConstraint*(g: var SudokuGrid) =
+proc createSudokuGrid*(filePath: string): SudokuGrid =
+   let gridStr = readFile(filePath).split({'\n', ' '})
+   for p in gridPos():
+      result.initSudokuGridValue(p, parseInt(gridStr[p.y * 9 + p.x]))
+
+proc solveWithConstraintProgramming*(g: var SudokuGrid) =
    for p in gridPos():
       if g[p].filled:
          g.onFilled(p)
@@ -251,15 +263,16 @@ proc solveWithConstraint*(g: var SudokuGrid) =
 ## Backtracing
 
 proc solveWithBacktracing*(g: var SudokuGrid) =
+   # Get grid constraints first
    for p in gridPos():
       if g[p].filled:
          g.onFilled(p)
 
+   let originalGrid = deepCopy(g)
+
    var indices: array[9, array[9, int]]
    for p in gridPos():
       indices[p] = 0
-
-   let originalGrid = deepCopy(g)
 
    var filled: array[9, array[9, bool]]
    for p in gridPos():
@@ -302,3 +315,8 @@ proc solveWithBacktracing*(g: var SudokuGrid) =
          p.next()
 
 ## Constraint Programming
+
+proc solve*(g: var SudokuGrid, solvingSolution: SolvingSolution) =
+   case solvingSolution:
+   of SolvingSolution.Backtracing: g.solveWithBacktracing()
+   of SolvingSolution.ConstraintProgramming: g.solveWithConstraintProgramming()

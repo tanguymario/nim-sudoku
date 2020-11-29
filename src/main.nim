@@ -1,205 +1,114 @@
 import sudoku
+import parseopt
+import strutils
+import times
+
+const version = 0.1
+
+type
+   CmdOpt = object
+      showHelp: bool
+      showVersion: bool
+      inputFilePath: string
+      outputFilePath: string
+      showGrids: bool
+      solvingSolution: SolvingSolution
+      solve: bool
+      showTime: bool
+      solutionGridFilePath: string
+
+proc createCmdOpt(): CmdOpt =
+   result.showHelp = false
+   result.showVersion = false
+   result.inputFilePath = ""
+   result.outputFilePath = ""
+   result.showGrids = false
+   result.solvingSolution = SolvingSolution.Backtracing
+   result.solve = false
+   result.showTime = false
+   result.solutionGridFilePath = ""
+
+proc helpStr(): string =
+   return """
+Nim-sudoku
+
+Arguments:
+   Input file path of the sudoku grid [string]
+
+Options:
+  -h --help                     Show this screen
+  --version                     Show version
+  --solveBacktracing            Solve the sudoku with backtracing
+  --solveConstraintProgramming  Solve the sudoku with constraint programming
+  --showGrids                   Show sudoku grids
+  -o --outputFile=[string]      Write result sudoku in the given file path
+  --showTime                    Show solving time
+  --checkWith=[string]          Check result sudoku with the given solution
+
+Usage:
+  # Show a sudoku grid
+  nim-sudoku grid.txt --showGrids
+
+  # Solve a sudoku grid with backtracing and show it with elapsed time
+  nim-sudoku grid.txt --solveBacktracing --showGrids --showTime
+"""
+
+proc versionStr(): string = result = "nim-sudoku " & $version
 
 proc main() =
-   # var grid = createSudokuGrid([
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   # ])
+   var cmdOpt = createCmdOpt()
+   for kind, key, val in getopt():
+      case kind
+      of cmdArgument:
+         cmdOpt.inputFilePath = key
+      of cmdLongOption, cmdShortOption:
+         case key:
+         of "o", "outputFile": cmdOpt.outputFilePath = val
+         of "h", "help": cmdOpt.showHelp = true
+         of "version": cmdOpt.showVersion = true
+         of "showGrids": cmdOpt.showGrids = true
+         of "solveBacktracing":
+            cmdOpt.solvingSolution = SolvingSolution.Backtracing
+            cmdOpt.solve = true
+         of "solveConstraintProgramming":
+            cmdOpt.solvingSolution = SolvingSolution.ConstraintProgramming
+            cmdOpt.solve = true
+         of "showTime": cmdOpt.showTime = true
+         of "checkWith": cmdOpt.solutionGridFilePath = val
+      of cmdEnd: assert(false)
 
-   # Easy - Arizona Daily Wildcat: Tuesday, Jan 17th 2006
-   # var fullGrid = createSudokuGrid([
-   #    [4, 3, 5, 2, 6, 9, 7, 8, 1],
-   #    [6, 8, 2, 5, 7, 1, 4, 9, 3],
-   #    [1, 9, 7, 8, 3, 4, 5, 6, 2],
-   #    [8, 2, 6, 1, 9, 5, 3, 4, 7],
-   #    [3, 7, 4, 6, 8, 2, 9, 1, 5],
-   #    [9, 5, 1, 7, 4, 3, 6, 2, 8],
-   #    [5, 1, 9, 3, 2, 6, 8, 7, 4],
-   #    [2, 4, 8, 9, 5, 7, 1, 3, 6],
-   #    [7, 6, 3, 4, 1, 8, 2, 5, 9],
-   # ])
+   if cmdOpt.showHelp:
+      echo helpStr()
+   elif cmdOpt.showVersion:
+      echo versionStr()
+   elif cmdOpt.inputFilePath.isEmptyOrWhitespace:
+      echo "Input file missing"
+      echo helpStr()
+   else:
+      var grid = createSudokuGrid(cmdOpt.inputFilePath)
+      if cmdOpt.showGrids:
+         echo "Input Grid"
+         echo grid
 
-   # var grid = createSudokuGrid([
-   #    [0, 0, 0, 2, 6, 0, 7, 0, 1],
-   #    [6, 8, 0, 0, 7, 0, 0, 9, 0],
-   #    [1, 9, 0, 0, 0, 4, 5, 0, 0],
-   #    [8, 2, 0, 1, 0, 0, 0, 4, 0],
-   #    [0, 0, 4, 6, 0, 2, 9, 0, 0],
-   #    [0, 5, 0, 0, 0, 3, 0, 2, 8],
-   #    [0, 0, 9, 3, 0, 0, 0, 7, 4],
-   #    [0, 4, 0, 0, 5, 0, 0, 3, 6],
-   #    [7, 0, 3, 0, 1, 8, 0, 0, 0],
-   # ])
+      if cmdOpt.solve:
+         let startTime = cpuTime()
+         grid.solve(cmdOpt.solvingSolution)
+         let duration = cpuTime() - startTime
 
-   # Easy - Arizona Daily Wildcat: Wednesday, Jan 18th 2006
-   # var fullGrid = createSudokuGrid([
-   #    [1, 5, 2, 4, 8, 9, 3, 7, 6],
-   #    [7, 3, 9, 2, 5, 6, 8, 4, 1],
-   #    [4, 6, 8, 3, 7, 1, 2, 9, 5],
-   #    [3, 8, 7, 1, 2, 4, 6, 5, 9],
-   #    [5, 9, 1, 7, 6, 3, 4, 2, 8],
-   #    [2, 4, 6, 8, 9, 5, 7, 1, 3],
-   #    [9, 1, 4, 6, 3, 7, 5, 8, 2],
-   #    [6, 2, 5, 9, 4, 8, 1, 3, 7],
-   #    [8, 7, 3, 5, 1, 2, 9, 6, 4],
-   # ])
+         if cmdOpt.showGrids:
+            echo "Solved Grid"
+            echo grid
 
-   # var grid = createSudokuGrid([
-   #    [1, 0, 0, 4, 8, 9, 0, 0, 6],
-   #    [7, 3, 0, 0, 0, 0, 0, 4, 0],
-   #    [0, 0, 0, 0, 0, 1, 2, 9, 5],
-   #    [0, 0, 7, 1, 2, 0, 6, 0, 0],
-   #    [5, 0, 0, 7, 0, 3, 0, 0, 8],
-   #    [0, 0, 6, 0, 9, 5, 7, 0, 0],
-   #    [9, 1, 4, 6, 0, 0, 0, 0, 0],
-   #    [0, 2, 0, 0, 0, 0, 0, 3, 7],
-   #    [8, 0, 0, 5, 1, 2, 0, 0, 4],
-   # ])
+         if not cmdOpt.solutionGridFilePath.isEmptyOrWhitespace:
+            let solutionGrid = createSudokuGrid(cmdOpt.solutionGridFilePath)
+            if grid == solutionGrid:
+               echo "Solved grid and given solution grid are same!"
+            else:
+               echo "Solved grid and given solution grid are different!"
+               if cmdOpt.showGrids:
+                  echo solutionGrid
 
-   # # Intermediate - Daily Telegraph January 19th "Diabolical"
-   # var fullGrid = createSudokuGrid([
-   #    [1, 2, 3, 6, 7, 8, 9, 4, 5],
-   #    [5, 8, 4, 2, 3, 9, 7, 6, 1],
-   #    [9, 6, 7, 1, 4, 5, 3, 2, 8],
-   #    [3, 7, 2, 4, 6, 1, 5, 8, 9],
-   #    [6, 9, 1, 5, 8, 3, 2, 7, 4],
-   #    [4, 5, 8, 7, 9, 2, 6, 1, 3],
-   #    [8, 3, 6, 9, 2, 4, 1, 5, 7],
-   #    [2, 1, 9, 8, 5, 7, 4, 3, 6],
-   #    [7, 4, 5, 3, 1, 6, 8, 9, 2],
-   # ])
-
-   # var grid = createSudokuGrid([
-   #    [0, 2, 0, 6, 0, 8, 0, 0, 0],
-   #    [5, 8, 0, 0, 0, 9, 7, 0, 0],
-   #    [0, 0, 0, 0, 4, 0, 0, 0, 0],
-   #    [3, 7, 0, 0, 0, 0, 5, 0, 0],
-   #    [6, 0, 0, 0, 0, 0, 0, 0, 4],
-   #    [0, 0, 8, 0, 0, 0, 0, 1, 3],
-   #    [0, 0, 0, 0, 2, 0, 0, 0, 0],
-   #    [0, 0, 9, 8, 0, 0, 0, 3, 6],
-   #    [0, 0, 0, 3, 0, 6, 0, 9, 0],
-   # ])
-
-   # Difficult - Vegard Hanssen puzzle 2155141
-   # var fullGrid = createSudokuGrid([
-   #    [5, 8, 1, 6, 7, 2, 4, 3, 9],
-   #    [7, 9, 2, 8, 4, 3, 6, 5, 1],
-   #    [3, 6, 4, 5, 9, 1, 7, 8, 2],
-   #    [4, 3, 8, 9, 5, 7, 2, 1, 6],
-   #    [2, 5, 6, 1, 8, 4, 9, 7, 3],
-   #    [1, 7, 9, 3, 2, 6, 8, 4, 5],
-   #    [8, 4, 5, 2, 1, 9, 3, 6, 7],
-   #    [9, 1, 3, 7, 6, 8, 5, 2, 4],
-   #    [6, 2, 7, 4, 3, 5, 1, 9, 8],
-   # ])
-
-   # var grid = createSudokuGrid([
-   #    [0, 0, 0, 6, 0, 0, 4, 0, 0],
-   #    [7, 0, 0, 0, 0, 3, 6, 0, 0],
-   #    [0, 0, 0, 0, 9, 1, 0, 8, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 5, 0, 1, 8, 0, 0, 0, 3],
-   #    [0, 0, 0, 3, 0, 6, 0, 4, 5],
-   #    [0, 4, 0, 2, 0, 0, 0, 6, 0],
-   #    [9, 0, 3, 0, 0, 0, 0, 0, 0],
-   #    [0, 2, 0, 0, 0, 0, 1, 0, 0],
-   # ])
-
-   # Not fun - Challenge 1 from Sudoku Solver by Logic
-   var fullGrid = createSudokuGrid([
-      [1, 2, 6, 4, 3, 7, 9, 5, 8],
-      [8, 9, 5, 6, 2, 1, 4, 7, 3],
-      [3, 7, 4, 9, 8, 5, 1, 2, 6],
-      [4, 5, 7, 1, 9, 3, 8, 6, 2],
-      [9, 8, 3, 2, 4, 6, 5, 1, 7],
-      [6, 1, 2, 5, 7, 8, 3, 9, 4],
-      [2, 6, 9, 3, 1, 4, 7, 8, 5],
-      [5, 4, 8, 7, 6, 9, 2, 3, 1],
-      [7, 3, 1, 8, 5, 2, 6, 4, 9],
-   ])
-
-   var grid = createSudokuGrid([
-      [0, 2, 0, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 6, 0, 0, 0, 0, 3],
-      [0, 7, 4, 0, 8, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0, 3, 0, 0, 2],
-      [0, 8, 0, 0, 4, 0, 0, 1, 0],
-      [6, 0, 0, 5, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 1, 0, 7, 8, 0],
-      [5, 0, 0, 0, 0, 9, 0, 0, 0],
-      [0, 0, 0, 0, 0, 0, 0, 4, 0],
-   ])
-
-   # Test
-   # var grid = createSudokuGrid([
-   #    [0, 0, 0, 7, 2, 1, 5, 8, 6],
-   #    [0, 0, 0, 0, 8, 0, 7, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 2, 0, 1],
-   #    [0, 0, 0, 5, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 5, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 1, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 2],
-   # ])
-
-   # Test 2
-   # var grid = createSudokuGrid([
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 5, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 1, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 5, 0, 0],
-   #    [0, 0, 0, 0, 0, 5, 0, 0, 0],
-   #    [0, 0, 7, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 3, 0, 0, 0, 0, 0, 0],
-   # ])
-
-   # Forced pairs example
-   # grid = createSudokuGrid([
-   #    [1, 2, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 7],
-   #    [3, 4, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [5, 6, 0, 0, 0, 0, 3, 0, 0],
-   #    [8, 9, 0, 0, 0, 0, 4, 5, 0],
-   # ])
-
-   # # Double pairs example
-   # grid = createSudokuGrid([
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 2, 7, 1],
-   #    [0, 0, 0, 1, 2, 7, 0, 0, 0],
-   #    [2, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [7, 0, 0, 0, 0, 0, 0, 0, 0],
-   #    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-   # ])
-
-   echo(grid)
-
-   # grid.solveWithConstraint()
-
-   grid.solveWithBacktracing()
-
-   echo(grid)
-
-   echo (if grid == fullGrid: "Correct!" else: "Incorrect")
-   if grid.broken:
-      echo "Broken!"
-
+         if cmdOpt.showTime:
+            let elapsedStr = duration.formatFloat(format=ffDecimal, precision=9)
+            echo "Solving time: " & $elapsedStr & "s"
 main()
