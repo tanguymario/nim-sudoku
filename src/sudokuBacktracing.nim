@@ -2,39 +2,42 @@ import sudoku
 import sudokuConstraintProgramming
 
 type
-   PossibleCell = object
+   PossibleCell = ref PossibleCellObj
+   PossibleCellObj = object
       p: Pos
       ind: int
 
 proc solveWithBacktracing*(g: var SudokuGrid) =
    let cpGrid = createSudokuCPGrid(g)
 
-   var possibleCells: seq[PossibleCell]
+   var cells: seq[PossibleCell]
    for p in gridPos():
       if not cpGrid[p].filled:
-         possibleCells.add(PossibleCell(p: p, ind: 0))
+         cells.add(PossibleCell(p: p, ind: 0))
 
    var i = 0
-   while i < len(possibleCells):
-      let v = cpGrid[possibleCells[i].p][possibleCells[i].ind]
+   while i < len(cells):
+      var cell = cells[i]
+      let v = cpGrid[cell.p][cell.ind]
       var invalid = false
-      for pp in rowColCasePos(possibleCells[i].p):
-         if pp != possibleCells[i].p and g[pp].filled and g[pp] == v:
+      for pp in rowColCasePos(cell.p):
+         if pp != cell.p and g[pp].filled and g[pp] == v:
             invalid = true
             break
 
       if invalid:
          while true:
-            if possibleCells[i].ind < len(cpGrid[possibleCells[i].p]) - 1:
-               possibleCells[i].ind += 1
+            if cell.ind < len(cpGrid[cell.p]) - 1:
+               cell.ind += 1
                break
             else:
-               possibleCells[i].ind = 0
-               g[possibleCells[i].p] = 0
+               cell.ind = 0
+               g[cell.p] = 0
 
                dec(i)
                if i < 0:
                   return
+               cell = cells[i]
       else:
-         g[possibleCells[i].p] = v
+         g[cell.p] = v
          inc(i)
