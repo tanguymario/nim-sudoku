@@ -29,10 +29,25 @@ proc debug*(g: SudokuCPGrid): string =
       result &= $p & " " & $g[p] & "\n"
 
 proc removePossibility(g: var SudokuCPGrid, p: Pos, v: SudokuCell)
-proc checkForcedDigit(g: var SudokuCPGrid, p: Pos, v: SudokuCell)
-proc checkForcedPairs(g: var SudokuCPGrid)
 proc onFilled(g: var SudokuCPGrid, p: Pos)
 proc fill(g: var SudokuCPGrid, p: Pos, v: SudokuCell)
+
+proc removePossibility(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
+   let idx = g[p].find(v)
+   if idx >= 0:
+      # echo $p & ": removed " & $v
+      g[p].del(idx)
+      if g[p].filled:
+         g.onFilled(p)
+
+proc onFilled(g: var SudokuCPGrid, p: Pos) =
+   for pp in rowColCasePos(p):
+      if p != pp:
+         g.removePossibility(pp, g[p][0])
+
+proc fill(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
+   g[p] = @[v]
+   g.onFilled(p)
 
 proc checkForcedDigit(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
    var caseConnectedPos: array[3, seq[Pos]]
@@ -44,7 +59,6 @@ proc checkForcedDigit(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
       if len(possiblePos) == 1:
          g.fill(possiblePos[0], v)
 
-# https://homepages.cwi.nl/~aeb/games/sudoku/solving5.html
 proc checkForcedPairs(g: var SudokuCPGrid) =
    for c in gridCases():
       for v in 1 .. 9:
@@ -67,37 +81,6 @@ proc checkForcedPairs(g: var SudokuCPGrid) =
                if p.y < c.y or p.y > c.y + 3:
                   g.removePossibility(p, v)
 
-# https://homepages.cwi.nl/~aeb/games/sudoku/solving6.html
-proc checkTwoPairs(g: var SudokuCPGrid) =
-   for v in 1 .. 9:
-      for caseY in 0 ..< 3:
-         var possibilities: array[3, seq[Pos]]
-         for caseX in 0 ..< 3:
-            possibilities[caseX] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
-         # TODO
-      for caseX in 0 ..< 3:
-         var possibilities: array[3, seq[Pos]]
-         for caseY in 0 ..< 3:
-            possibilities[caseY] = g.possiblePosAt(toSeq(casePos(Pos([caseY * 3, caseX * 3]))), v)
-         # TODO
-
-proc removePossibility(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
-   let idx = g[p].find(v)
-   if idx >= 0:
-      # echo $p & ": removed " & $v
-      g[p].del(idx)
-      if g[p].filled:
-         g.onFilled(p)
-
-proc onFilled(g: var SudokuCPGrid, p: Pos) =
-   for pp in rowColCasePos(p):
-      if p != pp:
-         g.removePossibility(pp, g[p][0])
-
-proc fill(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
-   g[p] = @[v]
-   g.onFilled(p)
-
 proc createSudokuCPGrid*(g: SudokuGrid): SudokuCPGrid =
    for p in gridPos():
       if g[p].filled:
@@ -113,28 +96,10 @@ proc solveWithConstraintProgramming*(g: var SudokuGrid) =
    var cpGrid = createSudokuCPGrid(g)
 
    var nbIters = 0
-   # while true:
-   #    break
-   # let cpGridCopy = deepCopy(cpGrid)
 
-   # inc(nbIters)
-   # echo "Iter num " & $nbIters
+   for p in gridPos():
+      for v in 1 .. 9:
+         cpGrid.checkForcedDigit(p, v)
 
-   # for p in gridPos():
-   #    for v in 1 .. 9:
-   #       cpGrid.checkForcedDigit(p, v)
-
-   # cpGrid.checkForcedPairs()
-
-   # cpGrid.checkTwoPairs()
-
-   # if cpGrid == cpGridCopy:
-   #    break
-
-   # TODO write grid
    for p in gridPos():
       g[p] = cpGrid[p].value
-
-   # echo "Number of iterations: " & $nbIters
-   # echo "Grid is " & (if g.full: "full" else: "not full")
-   # echo debug(g)

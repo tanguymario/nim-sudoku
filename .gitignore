@@ -1,3 +1,6 @@
 bin/
+nimcache/
+nimblecache/
+htmldocs/
 nim-sudoku.sublime-project
 nim-sudoku.sublime-workspace

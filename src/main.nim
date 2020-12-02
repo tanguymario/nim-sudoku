@@ -3,7 +3,6 @@ import strutils
 import times
 
 import sudoku
-import sudokuBacktracing
 import sudokuConstraintProgramming
 
 const version = 0.1
