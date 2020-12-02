@@ -3,7 +3,6 @@ import strutils
 import times
 
 import sudoku
-import sudokuConstraintProgramming
 
 const version = 0.1
 
@@ -101,7 +100,7 @@ proc main() =
 
          case cmdOpt.solvingSolution:
             of SolvingSolution.ConstraintProgramming:
-               grid.solveWithConstraintProgramming()
+               discard grid.solveWithConstraintProgramming()
             of SolvingSolution.Backtracing:
                grid.solveWithBacktracing()
 

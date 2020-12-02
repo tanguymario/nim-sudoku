@@ -140,56 +140,38 @@ proc createSudokuGrid*(filePath: string): SudokuGrid =
 ## Sudoku Cell and Grid Solvers. They represent the possibilities of the sudoku
 
 type
-   SolverCell* = uint16
+   SolverCell* = seq[int]
    SolverGrid* = array[9, array[9, SolverCell]]
 
-proc nbPossibilities*(c: SolverCell): int = return countSetBits(c)
-proc filled*(c: SolverCell): bool = return c.nbPossibilities == 1
-proc value*(c: SolverCell): SudokuCell =
-   return (if c.filled: firstSetBit(c) - 1 else: 0)
+proc nbPossibilities*(sc: SolverCell): int = return len(sc)
+proc filled*(sc: SolverCell): bool = return sc.nbPossibilities == 1
+proc value*(sc: SolverCell): SudokuCell = return (if sc.filled: sc[0] else: 0)
 
-proc isPossible*(c: SolverCell, v: SudokuCell): bool = return c.testBit(v)
+proc isPossible*(sc: SolverCell, v: SudokuCell): bool = return sc.contains(v)
 
-iterator possibilities(c: SolverCell): SudokuCell =
-   for i in 1 .. 9:
-      if c.isPossible(i):
-         yield i
-
-proc `[]`*(c: SolverCell, i: int): SudokuCell =
-   var tmpI = 0
-
-   for possibility in c.possibilities:
-      if i == tmpI:
-         return possibility
-      inc(tmpI)
-   return -1
-
-proc `$`*(g: SolverGrid): string =
+proc `$`*(sg: SolverGrid): string =
    for p in gridPos():
-      result &= $p & "["
-      for possibility in g[p].possibilities:
-         result &= $possibility & ", "
-      result &= "]" & "\n"
+      result &= $p & $sg[p] & "\n"
 
-proc removePossibility(g: var SolverGrid, p: Pos, v: SudokuCell)
-proc onFilled(g: var SolverGrid, p: Pos)
-proc fill(g: var SolverGrid, p: Pos, v: SudokuCell)
+proc removePossibility(sg: var SolverGrid, p: Pos, v: SudokuCell)
+proc onFilled(sg: var SolverGrid, p: Pos)
+proc fill(sg: var SolverGrid, p: Pos, v: SudokuCell)
 
-proc removePossibility(g: var SolverGrid, p: Pos, v: SudokuCell) =
-   if not g[p].filled:
-      g[p].clearBit(v)
-      if g[p].filled:
-         g.onFilled(p)
+proc removePossibility(sg: var SolverGrid, p: Pos, v: SudokuCell) =
+   let idx = sg[p].find(v)
+   if idx >= 0:
+      sg[p].del(idx)
+      if sg[p].filled:
+         sg.onFilled(p)
 
-proc onFilled(g: var SolverGrid, p: Pos) =
+proc onFilled(sg: var SolverGrid, p: Pos) =
    for pp in rowColCasePos(p):
       if p != pp:
-         g.removePossibility(pp, g[p].value)
+         sg.removePossibility(pp, sg[p][0])
 
-proc fill(g: var SolverGrid, p: Pos, v: SudokuCell) =
-   g[p] = 0
-   g[p].setBit(v)
-   g.onFilled(p)
+proc fill(sg: var SolverGrid, p: Pos, v: SudokuCell) =
+   sg[p] = @[v]
+   sg.onFilled(p)
 
 # proc checkForcedDigit(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
 #    var caseConnectedPos: array[3, seq[Pos]]
@@ -229,11 +211,10 @@ proc apply*(sg: SolverGrid, g: var SudokuGrid) =
 
 proc createSolverGrid*(g: SudokuGrid): SolverGrid =
    for p in gridPos():
-      result[p] = 0
       if g[p].filled:
-         result[p].setBit(g[p])
+         result[p] = @[g[p]]
       else:
-         result[p].setBits(1, 2, 3, 4, 5, 6, 7, 8, 9)
+         result[p] = @[1, 2, 3, 4, 5, 6, 7, 8, 9]
 
    for p in gridPos():
       if g[p].filled:
@@ -286,3 +267,10 @@ proc solveWithBacktracing*(g: var SudokuGrid) =
    var sg = createSolverGrid(g)
    sg.apply(g)
    g.solveWithBacktracing(sg)
+
+## Constraint Programming
+
+proc solveWithConstraintProgramming*(g: var SudokuGrid): SolverGrid =
+   var sg = createSolverGrid(g)
+   sg.apply(g)
+   return sg
