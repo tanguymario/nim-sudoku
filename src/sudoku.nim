@@ -1,4 +1,5 @@
 import strutils
+import times
 import sequtils
 import random
 
@@ -126,11 +127,11 @@ proc broken*(g: SudokuGrid): bool =
             return true
    return false
 
-proc getRawStr*(g: SudokuGrid): string =
+proc `$`*(g: SudokuGrid): string =
    for y in 0 ..< 9:
       result &= join(g[y], " ") & "\n"
 
-proc `$`*(g: SudokuGrid): string =
+proc fancyStr*(g: SudokuGrid): string =
    result &= "╔═══════╦═══════╦═══════╗\n"
    for y in 0 ..< 9:
       if y > 0 and y mod 3 == 0:
@@ -157,7 +158,7 @@ proc createSudokuGrid*(filePath: string): SudokuGrid =
 
 proc writeToFile*(g: SudokuGrid, filePath: string) =
    let f = open(filePath, fmWrite)
-   f.write(g.getRawStr())
+   f.write($g)
    f.close()
 
 ## Sudoku Cell and Grid Solvers. They represent the possibilities of the sudoku
@@ -354,7 +355,8 @@ proc generate*(difficulty: int): SudokuGrid =
 
    # Minimum number of clues to have a unique solution is 17
    # See https://arxiv.org/pdf/1201.0749.pdf
-   const nbMaxRemovableCells = 9 * 9 - 17
+   # Since my solution is not perfect we reduce the nb max of removable cells
+   const nbMaxRemovableCells = 9 * 9 - 17 - 11
    var nbCellsToRemove = int(
       nbMaxRemovableCells * clamp(difficulty, 0, 100) / 100)
 
@@ -375,3 +377,135 @@ proc generate*(difficulty: int): SudokuGrid =
 
       if not resultInfo.multipleGridsExist:
          break
+
+when isMainModule:
+   import parseopt
+
+   const version = 0.1
+
+   type
+      CmdOpt = object
+         showHelp: bool
+         showVersion: bool
+         inputFilePath: string
+         outputFilePath: string
+         showGrids: bool
+         gridToSolvePath: string
+         generate: bool
+         generateDifficulty: int
+         showTime: bool
+         solutionGridFilePath: string
+
+   proc createCmdOpt(): CmdOpt =
+      result.showHelp = false
+      result.showVersion = false
+      result.inputFilePath = ""
+      result.outputFilePath = ""
+      result.showGrids = false
+      result.gridToSolvePath = ""
+      result.generate = false
+      result.generateDifficulty = 0
+      result.showTime = false
+      result.solutionGridFilePath = ""
+
+   proc versionStr(): string = return "nim-sudoku " & $version
+
+   proc helpStr(): string =
+      return versionStr() & "\n" & """
+
+Options:
+  -h --help              Show this screen
+  --version              Show version
+  --solve=[string]       Solve the sudoku at the given filepath
+  --generate=[0-100]     Generates a sudoku grid with the given difficulty
+  --showGrids            Show sudoku grids
+  --outputFile=[string]  Write result sudoku in the given file path
+  --showTime             Show solving time
+  --checkWith=[string]   Check result sudoku with the given solution
+
+Usage:
+  # Solve a sudoku grid and show it with elapsed time
+  nim-sudoku --solve=grid.txt --showGrids --showTime
+
+  # Generate a sudoku grid and writes it into a file
+  nim-sudoku --generate=50 --showGrids --showTime --outputFile=test1.txt
+
+Notes:
+  Format for sudoku grid is:
+    - each column is separated by a space
+    - each row is separated by a new line
+   """
+
+   proc main() =
+      var cmdOpt = createCmdOpt()
+      for kind, key, val in getopt():
+         case kind
+         of cmdArgument: discard
+         of cmdLongOption, cmdShortOption:
+            case key:
+            of "outputFile": cmdOpt.outputFilePath = val
+            of "h", "help": cmdOpt.showHelp = true
+            of "version": cmdOpt.showVersion = true
+            of "showGrids": cmdOpt.showGrids = true
+            of "solve": cmdOpt.gridToSolvePath = val
+            of "generate":
+               cmdOpt.generate = true
+               cmdOpt.generateDifficulty = parseInt(val)
+            of "showTime": cmdOpt.showTime = true
+            of "checkWith": cmdOpt.solutionGridFilePath = val
+         of cmdEnd: assert(false)
+
+      if cmdOpt.showHelp:
+         echo helpStr()
+      elif cmdOpt.showVersion:
+         echo versionStr()
+      elif not cmdOpt.gridToSolvePath.isEmptyOrWhitespace:
+         var grid = createSudokuGrid(cmdOpt.gridToSolvePath)
+
+         if cmdOpt.showGrids:
+            echo "Input Grid"
+            echo grid.fancyStr()
+
+         let startTime = cpuTime()
+         grid.solve()
+         let duration = cpuTime() - startTime
+
+         if cmdOpt.showGrids:
+            echo "Solved Grid"
+            echo grid.fancyStr()
+
+         if not cmdOpt.solutionGridFilePath.isEmptyOrWhitespace:
+            let solutionGrid = createSudokuGrid(cmdOpt.solutionGridFilePath)
+            if grid == solutionGrid:
+               echo "Solved grid and given solution grid are same!"
+            else:
+               echo "Solved grid and given solution grid are different!"
+               if cmdOpt.showGrids:
+                  echo solutionGrid.fancyStr()
+
+         if cmdOpt.showTime:
+            let elapsedStr = duration.formatFloat(format=ffDecimal, precision=9)
+            echo "Solving time: " & $elapsedStr & "s"
+
+         if not cmdOpt.outputFilePath.isEmptyOrWhitespace:
+            grid.writeToFile(cmdOpt.outputFilePath)
+
+      elif cmdOpt.generate:
+         let startTime = cpuTime()
+         var grid = generate(cmdOpt.generateDifficulty)
+         let duration = cpuTime() - startTime
+
+         if cmdOpt.showGrids:
+            echo "Generated Grid"
+            echo grid.fancyStr()
+
+         if cmdOpt.showTime:
+            let elapsedStr = duration.formatFloat(format=ffDecimal, precision=9)
+            echo "Generating time: " & $elapsedStr & "s"
+
+         if not cmdOpt.outputFilePath.isEmptyOrWhitespace:
+            grid.writeToFile(cmdOpt.outputFilePath)
+      else:
+         echo helpStr()
+
+   main()

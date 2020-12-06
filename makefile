@@ -1,5 +1,5 @@
 exec = bin/nim-sudoku
-mainFile = src/main
+mainFile = src/sudoku
 
 make:
 	nim c -o:$(exec) $(mainFile)
