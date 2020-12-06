@@ -1,5 +1,9 @@
 import strutils
-import bitops
+import sequtils
+import random
+import math
+
+randomize()
 
 ## Util to get position in the sudoku grid
 
@@ -40,6 +44,13 @@ proc `[]=`*[T](g: var array[9, array[9, T]], y, x: int, v: T) = g[y][x] = v
 proc `[]`*[T](g: array[9, array[9, T]], p: Pos): T = return g[p.y][p.x]
 proc `[]`*[T](g: var array[9, array[9, T]], p: Pos): var T = return g[p.y][p.x]
 proc `[]=`*[T](g: var array[9, array[9, T]], p: Pos, v: T) = g[p.y][p.x] = v
+
+iterator pos*(topLeft, bottomRight: Pos): Pos =
+   var p = topLeft
+   yield p
+   while not p.outOfBounds and p != bottomRight:
+      p.next()
+      yield p
 
 iterator gridPos*(): Pos =
    for y in 0 ..< 9:
@@ -116,6 +127,10 @@ proc broken*(g: SudokuGrid): bool =
             return true
    return false
 
+proc getRawStr*(g: SudokuGrid): string =
+   for y in 0 ..< 9:
+      result &= join(g[y], " ") & "\n"
+
 proc `$`*(g: SudokuGrid): string =
    result &= "╔═══════╦═══════╦═══════╗\n"
    for y in 0 ..< 9:
@@ -128,6 +143,10 @@ proc `$`*(g: SudokuGrid): string =
       result &= "\n"
    result &= "╚═══════╩═══════╩═══════╝\n"
 
+proc createSudokuGrid*(): SudokuGrid =
+   for p in gridPos():
+      result[p] = 0
+
 proc createSudokuGrid*(m: array[9, array[9, SudokuCell]]): SudokuGrid =
    for p in gridPos():
       result[p] = m[p]
@@ -136,6 +155,11 @@ proc createSudokuGrid*(filePath: string): SudokuGrid =
    let gridStr = readFile(filePath).split({'\n', ' '})
    for p in gridPos():
       result[p] = parseInt(gridStr[p.y * 9 + p.x])
+
+proc writeToFile*(g: SudokuGrid, filePath: string) =
+   let f = open(filePath, fmWrite)
+   f.write(g.getRawStr())
+   f.close()
 
 ## Sudoku Cell and Grid Solvers. They represent the possibilities of the sudoku
 
@@ -147,7 +171,13 @@ proc nbPossibilities*(sc: SolverCell): int = return len(sc)
 proc filled*(sc: SolverCell): bool = return sc.nbPossibilities == 1
 proc value*(sc: SolverCell): SudokuCell = return (if sc.filled: sc[0] else: 0)
 
-proc isPossible*(sc: SolverCell, v: SudokuCell): bool = return sc.contains(v)
+proc isPossible*(sc: SolverCell, v: SudokuCell): bool =
+   return not sc.filled and sc.contains(v)
+
+proc getPossiblePos*(sg: SolverGrid, pos: seq[Pos], v: SudokuCell): seq[Pos] =
+   for p in pos:
+      if sg[p].isPossible(v):
+         result.add(p)
 
 proc `$`*(sg: SolverGrid): string =
    for p in gridPos():
@@ -155,7 +185,6 @@ proc `$`*(sg: SolverGrid): string =
 
 proc removePossibility(sg: var SolverGrid, p: Pos, v: SudokuCell)
 proc onFilled(sg: var SolverGrid, p: Pos)
-proc fill(sg: var SolverGrid, p: Pos, v: SudokuCell)
 
 proc removePossibility(sg: var SolverGrid, p: Pos, v: SudokuCell) =
    let idx = sg[p].find(v)
@@ -173,37 +202,33 @@ proc fill(sg: var SolverGrid, p: Pos, v: SudokuCell) =
    sg[p] = @[v]
    sg.onFilled(p)
 
-# proc checkForcedDigit(g: var SudokuCPGrid, p: Pos, v: SudokuCell) =
-#    var caseConnectedPos: array[3, seq[Pos]]
-#    caseConnectedPos[0] = toSeq(rowPos(p.y))
-#    caseConnectedPos[1] = toSeq(colPos(p.x))
-#    caseConnectedPos[2] = toSeq(casePos(p))
-#    for i in 0 ..< 3:
-#       let possiblePos = g.possiblePosAt(caseConnectedPos[i], v)
-#       if len(possiblePos) == 1:
-#          g.fill(possiblePos[0], v)
+proc checkForcedDigits(sg: var SolverGrid) =
+   var canSolve = true
+   while canSolve:
+      canSolve = false
+      for v in 1 .. 9:
+         for y in 0 ..< 9:
+            let rowPossibilitiesPos = sg.getPossiblePos(toSeq(rowPos(y)), v)
+            if len(rowPossibilitiesPos) == 1:
+               canSolve = true
+               sg.fill(rowPossibilitiesPos[0], v)
 
-# proc checkForcedPairs(g: var SudokuCPGrid) =
-#    for c in gridCases():
-#       for v in 1 .. 9:
-#          let possiblePos = g.possiblePosAt(toSeq(casePos(c)), v)
-#          if len(possiblePos) == 0:
-#             continue
+         for x in 0 ..< 9:
+            let colPossibilitiesPos = sg.getPossiblePos(toSeq(colPos(x)), v)
+            if len(colPossibilitiesPos) == 1:
+               canSolve = true
+               sg.fill(colPossibilitiesPos[0], v)
 
-#          var rowsPossible = [false, false, false]
-#          var colsPossible = [false, false, false]
-#          for p in possiblePos:
-#             rowsPossible[p.y - c.y] = true
-#             colsPossible[p.x - c.x] = true
-
-#          if rowsPossible.count(true) == 1:
-#             for p in rowPos(c.y + rowsPossible.find(true)):
-#                if p.x < c.x or p.x > c.x + 3:
-#                   g.removePossibility(p, v)
-#          elif colsPossible.count(true) == 1:
-#             for p in colPos(c.x + colsPossible.find(true)):
-#                if p.y < c.y or p.y > c.y + 3:
-#                   g.removePossibility(p, v)
+         for caseY in 0 ..< 3:
+            for caseX in 0 ..< 3:
+               for y in 0 ..< 3:
+                  for x in 0 ..< 3:
+                     let p = Pos([caseY * 3 + y, caseX * 3 + x])
+                     let casePossibilitiesPos =
+                        sg.getPossiblePos(toSeq(casePos(p)), v)
+                     if len(casePossibilitiesPos) == 1:
+                        canSolve = true
+                        sg.fill(casePossibilitiesPos[0], v)
 
 proc apply*(sg: SolverGrid, g: var SudokuGrid) =
    for p in gridPos():
@@ -220,57 +245,164 @@ proc createSolverGrid*(g: SudokuGrid): SolverGrid =
       if g[p].filled:
          result.onFilled(p)
 
-## Backtracing
+   result.checkForcedDigits()
 
-proc solveWithBacktracing(g: var SudokuGrid, sg: SolverGrid) =
+type
+   SolveOpts* = object
+      randomizeBacktracingIndices: bool
+      checkIfMultipleSolutionsExists: bool
+
+   SolveResultInfo* = object
+      solutionFound: bool
+      multipleGridsExist: bool
+
+proc init(resultInfo: var SolveResultInfo) =
+   resultInfo.solutionFound = false
+   resultInfo.multipleGridsExist = false
+
+proc backtracing(
+   g: var SudokuGrid, sg: SolverGrid,
+   opts: SolveOpts, resultInfo: var SolveResultInfo) =
+
+   if g.full:
+      resultInfo.solutionFound = true
+      resultInfo.multipleGridsExist = false
+      return
+
    type
       PossibleCell = ref PossibleCellObj
       PossibleCellObj = object
          p: Pos
+         possibilities: SolverCell
          ind: int
 
    var cells: seq[PossibleCell]
    for p in gridPos():
       if not sg[p].filled:
-         cells.add(PossibleCell(p: p, ind: 0))
+         cells.add(PossibleCell(p: p, possibilities: sg[p], ind: 0))
 
-   var iter = 0
+   if opts.randomizeBacktracingIndices:
+      for cell in cells:
+         cell.possibilities.shuffle()
+
    var i = 0
-   while i < len(cells):
-      var cell = cells[i]
-      let v = sg[cell.p][cell.ind]
+
+   let increaseValueOrGoBack = proc(g: var SudokuGrid): bool =
+      while true:
+         if cells[i].ind < len(cells[i].possibilities) - 1:
+            cells[i].ind += 1
+            return true
+         else:
+            cells[i].ind = 0
+            g[cells[i].p] = 0
+
+            dec(i)
+            if i < 0:
+               return false
+
+   while true:
+      let v = cells[i].possibilities[cells[i].ind]
+
       var invalid = false
-      for pp in rowColCasePos(cell.p):
-         if pp != cell.p and g[pp].filled and g[pp] == v:
+      for pp in rowColCasePos(cells[i].p):
+         if pp != cells[i].p and g[pp].filled and g[pp] == v:
             invalid = true
             break
 
       if invalid:
-         while true:
-            if cell.ind < sg[cell.p].nbPossibilities - 1:
-               cell.ind += 1
-               break
-            else:
-               cell.ind = 0
-               g[cell.p] = 0
-
-               dec(i)
-               if i < 0:
-                  echo "oups"
-                  return
-               cell = cells[i]
+         if not increaseValueOrGoBack(g):
+            return
       else:
-         g[cell.p] = v
+         g[cells[i].p] = v
          inc(i)
 
-proc solveWithBacktracing*(g: var SudokuGrid) =
-   var sg = createSolverGrid(g)
-   sg.apply(g)
-   g.solveWithBacktracing(sg)
+         if i >= len(cells):
+            if not opts.checkIfMultipleSolutionsExists:
+               resultInfo.solutionFound = true
+               break
+            elif resultInfo.solutionFound:
+               resultInfo.multipleGridsExist = true
+               break
+            else:
+               resultInfo.solutionFound = true
+               i -= 1
+               if not increaseValueOrGoBack(g):
+                  return
 
-## Constraint Programming
+proc solve*(g: var SudokuGrid, opts: SolveOpts): SolveResultInfo =
+   result.init()
+   if not g.broken:
+      var sg = createSolverGrid(g)
+      sg.apply(g)
+      g.backtracing(sg, opts, result)
 
-proc solveWithConstraintProgramming*(g: var SudokuGrid): SolverGrid =
-   var sg = createSolverGrid(g)
-   sg.apply(g)
-   return sg
+proc solve*(g: var SudokuGrid) =
+   discard g.solve(SolveOpts(
+      randomizeBacktracingIndices: false,
+      checkIfMultipleSolutionsExists: false))
+
+## Generate Sudoku
+
+proc generateNaiveFullGrid*(): SudokuGrid = result.solve()
+const NaiveGeneratedFullGrid*: SudokuGrid = generateNaiveFullGrid()
+
+proc generateRandomFullGrid*(): SudokuGrid =
+   discard result.solve(SolveOpts(
+      randomizeBacktracingIndices: true,
+      checkIfMultipleSolutionsExists: false))
+
+proc exchangeCols*(g: var SudokuGrid, firstCol, secondCol: int) =
+   for y in 0 ..< 9:
+      let tmp = g[y, firstCol]
+      g[y, firstCol] = g[y, secondCol]
+      g[y, secondCol] = tmp
+
+proc exchangeRows*(g: var SudokuGrid, firstRow, secondRow: int) =
+   for x in 0 ..< 9:
+      let tmp = g[firstRow, x]
+      g[firstRow, x] = g[secondRow, x]
+      g[secondRow, x] = tmp
+
+proc exchangeRowsGroups*(g: var SudokuGrid) =
+   for y in 0 ..< 3:
+      g.exchangeRows(y, 3 + y)
+   for y in 0 ..< 3:
+      g.exchangeRows(3 + y, 6 + y)
+
+proc exchangeColsGroups*(g: var SudokuGrid) =
+   for x in 0 ..< 3:
+      g.exchangeCols(x, 3 + x)
+   for x in 0 ..< 3:
+      g.exchangeRows(3 + x, 6 + x)
+
+proc transpose*(g: var SudokuGrid) =
+   var gCopy = g
+   for p in gridPos():
+      g[p.y, p.x] = gCopy[p.x, p.y]
+
+proc generate*(difficulty: int): SudokuGrid =
+   let originalGeneratedGrid = generateRandomFullGrid()
+
+   # Minimum number of clues to have a unique solution is 17
+   # See https://arxiv.org/pdf/1201.0749.pdf
+   const nbMaxRemovableCells = 9 * 9 - 17
+   var nbCellsToRemove = int(
+      nbMaxRemovableCells * clamp(difficulty, 0, 100) / 100)
+
+   while true:
+      result = originalGeneratedGrid
+
+      var randomGridPos = toSeq(gridPos())
+      randomGridPos.shuffle()
+
+      for i in 0 ..< nbCellsToRemove:
+         result[randomGridPos.pop()] = 0
+
+      var gCopy = result
+
+      let resultInfo = gCopy.solve(SolveOpts(
+         randomizeBacktracingIndices: false,
+         checkIfMultipleSolutionsExists: true))
+
+      if not resultInfo.multipleGridsExist:
+         break
