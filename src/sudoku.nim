@@ -1,7 +1,6 @@
 import strutils
 import sequtils
 import random
-import math
 
 randomize()
 
@@ -256,10 +255,6 @@ type
       solutionFound: bool
       multipleGridsExist: bool
 
-proc init(resultInfo: var SolveResultInfo) =
-   resultInfo.solutionFound = false
-   resultInfo.multipleGridsExist = false
-
 proc backtracing(
    g: var SudokuGrid, sg: SolverGrid,
    opts: SolveOpts, resultInfo: var SolveResultInfo) =
@@ -311,7 +306,7 @@ proc backtracing(
 
       if invalid:
          if not increaseValueOrGoBack(g):
-            return
+            break
       else:
          g[cells[i].p] = v
          inc(i)
@@ -327,10 +322,13 @@ proc backtracing(
                resultInfo.solutionFound = true
                i -= 1
                if not increaseValueOrGoBack(g):
-                  return
+                  break
 
 proc solve*(g: var SudokuGrid, opts: SolveOpts): SolveResultInfo =
-   result.init()
+   result = SolveResultInfo(
+      solutionFound: false,
+      multipleGridsExist: false)
+
    if not g.broken:
       var sg = createSolverGrid(g)
       sg.apply(g)
@@ -350,35 +348,6 @@ proc generateRandomFullGrid*(): SudokuGrid =
    discard result.solve(SolveOpts(
       randomizeBacktracingIndices: true,
       checkIfMultipleSolutionsExists: false))
-
-proc exchangeCols*(g: var SudokuGrid, firstCol, secondCol: int) =
-   for y in 0 ..< 9:
-      let tmp = g[y, firstCol]
-      g[y, firstCol] = g[y, secondCol]
-      g[y, secondCol] = tmp
-
-proc exchangeRows*(g: var SudokuGrid, firstRow, secondRow: int) =
-   for x in 0 ..< 9:
-      let tmp = g[firstRow, x]
-      g[firstRow, x] = g[secondRow, x]
-      g[secondRow, x] = tmp
-
-proc exchangeRowsGroups*(g: var SudokuGrid) =
-   for y in 0 ..< 3:
-      g.exchangeRows(y, 3 + y)
-   for y in 0 ..< 3:
-      g.exchangeRows(3 + y, 6 + y)
-
-proc exchangeColsGroups*(g: var SudokuGrid) =
-   for x in 0 ..< 3:
-      g.exchangeCols(x, 3 + x)
-   for x in 0 ..< 3:
-      g.exchangeRows(3 + x, 6 + x)
-
-proc transpose*(g: var SudokuGrid) =
-   var gCopy = g
-   for p in gridPos():
-      g[p.y, p.x] = gCopy[p.x, p.y]
 
 proc generate*(difficulty: int): SudokuGrid =
    let originalGeneratedGrid = generateRandomFullGrid()
