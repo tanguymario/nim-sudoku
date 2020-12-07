@@ -45,13 +45,6 @@ proc `[]`*[T](g: array[9, array[9, T]], p: Pos): T = return g[p.y][p.x]
 proc `[]`*[T](g: var array[9, array[9, T]], p: Pos): var T = return g[p.y][p.x]
 proc `[]=`*[T](g: var array[9, array[9, T]], p: Pos, v: T) = g[p.y][p.x] = v
 
-iterator pos*(topLeft, bottomRight: Pos): Pos =
-   var p = topLeft
-   yield p
-   while not p.outOfBounds and p != bottomRight:
-      p.next()
-      yield p
-
 iterator gridPos*(): Pos =
    for y in 0 ..< 9:
       for x in  0 ..< 9:
@@ -354,7 +347,6 @@ proc generateRandomFullGrid*(r: var Rand): SudokuGrid =
       checkIfMultipleSolutionsExists: false))
 
 proc generate*(difficulty: int, seed=""): SudokuGrid =
-   const useSeed = true
    var r: Rand
    if not seed.isEmptyOrWhitespace:
       r = initRand(int64(hash(seed)))
@@ -366,9 +358,12 @@ proc generate*(difficulty: int, seed=""): SudokuGrid =
 
    # Minimum number of clues to have a unique solution is 17
    # See https://arxiv.org/pdf/1201.0749.pdf
+   const minNbCellsToSolve = 17
    # Since my solution is not perfect we reduce the nb max of removable cells
-   const nbMaxRemovableCells = 9 * 9 - 17 - 11
-   var nbCellsToRemove = int(
+   const minNbCellsToGenerate = minNbCellsToSolve + 7
+   const nbMaxRemovableCells = 9 * 9 - minNbCellsToGenerate
+
+   let nbCellsToRemove = int(
       nbMaxRemovableCells * clamp(difficulty, 0, 100) / 100)
 
    while true:
