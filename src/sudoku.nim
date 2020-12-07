@@ -359,21 +359,19 @@ proc generate*(difficulty: int, seed=""): SudokuGrid =
    # Minimum number of clues to have a unique solution is 17
    # See https://arxiv.org/pdf/1201.0749.pdf
    const minNbCellsToSolve = 17
-   # Since my solution is not perfect we reduce the nb max of removable cells
-   const minNbCellsToGenerate = minNbCellsToSolve + 7
-   const nbMaxRemovableCells = 9 * 9 - minNbCellsToGenerate
+   const nbMaxRemovableCells = 9 * 9 - minNbCellsToSolve
 
    let nbCellsToRemove = int(
       nbMaxRemovableCells * clamp(difficulty, 0, 100) / 100)
 
-   while true:
-      result = originalGeneratedGrid
+   result = originalGeneratedGrid
+   var randomGridPos = toSeq(gridPos())
+   shuffle(r, randomGridPos)
 
-      var randomGridPos = toSeq(gridPos())
-      shuffle(r, randomGridPos)
-
-      for i in 0 ..< nbCellsToRemove:
-         result[randomGridPos.pop()] = 0
+   var nbCellsRemoved = 0
+   while len(randomGridPos) > 0 and nbCellsRemoved < nbCellsToRemove:
+      let p = randomGridPos.pop()
+      result[p] = 0
 
       var gCopy = result
 
@@ -381,8 +379,10 @@ proc generate*(difficulty: int, seed=""): SudokuGrid =
          randomizeBacktracingIndices: false,
          checkIfMultipleSolutionsExists: true))
 
-      if not resultInfo.multipleGridsExist:
-         break
+      if resultInfo.multipleGridsExist:
+         result[p] = originalGeneratedGrid[p]
+      else:
+         inc(nbCellsRemoved)
 
 when isMainModule:
    import parseopt
