@@ -2,8 +2,8 @@ import strutils
 import times
 import sequtils
 import random
-
-randomize()
+import hashes
+from times import getTime, toUnix, nanosecond
 
 ## Util to get position in the sudoku grid
 
@@ -250,6 +250,7 @@ proc createSolverGrid*(g: SudokuGrid): SolverGrid =
 type
    SolveOpts* = object
       randomizeBacktracingIndices: bool
+      rand: Rand
       checkIfMultipleSolutionsExists: bool
 
    SolveResultInfo* = object
@@ -278,8 +279,9 @@ proc backtracing(
          cells.add(PossibleCell(p: p, possibilities: sg[p], ind: 0))
 
    if opts.randomizeBacktracingIndices:
+      var r = opts.rand
       for cell in cells:
-         cell.possibilities.shuffle()
+         shuffle(r, cell.possibilities)
 
    var i = 0
 
@@ -345,13 +347,22 @@ proc solve*(g: var SudokuGrid) =
 proc generateNaiveFullGrid*(): SudokuGrid = result.solve()
 const NaiveGeneratedFullGrid*: SudokuGrid = generateNaiveFullGrid()
 
-proc generateRandomFullGrid*(): SudokuGrid =
+proc generateRandomFullGrid*(r: var Rand): SudokuGrid =
    discard result.solve(SolveOpts(
       randomizeBacktracingIndices: true,
+      rand: r,
       checkIfMultipleSolutionsExists: false))
 
-proc generate*(difficulty: int): SudokuGrid =
-   let originalGeneratedGrid = generateRandomFullGrid()
+proc generate*(difficulty: int, seed=""): SudokuGrid =
+   const useSeed = true
+   var r: Rand
+   if not seed.isEmptyOrWhitespace:
+      r = initRand(int64(hash(seed)))
+   else:
+      let now = getTime()
+      r = initRand(now.toUnix * 1_000_000_000 + now.nanosecond)
+
+   let originalGeneratedGrid = generateRandomFullGrid(r)
 
    # Minimum number of clues to have a unique solution is 17
    # See https://arxiv.org/pdf/1201.0749.pdf
@@ -364,7 +375,7 @@ proc generate*(difficulty: int): SudokuGrid =
       result = originalGeneratedGrid
 
       var randomGridPos = toSeq(gridPos())
-      randomGridPos.shuffle()
+      shuffle(r, randomGridPos)
 
       for i in 0 ..< nbCellsToRemove:
          result[randomGridPos.pop()] = 0
@@ -392,6 +403,7 @@ when isMainModule:
          showGrids: bool
          gridToSolvePath: string
          generate: bool
+         generateSeed: string
          generateDifficulty: int
          showTime: bool
          solutionGridFilePath: string
@@ -405,6 +417,7 @@ when isMainModule:
       result.gridToSolvePath = ""
       result.generate = false
       result.generateDifficulty = 0
+      result.generateSeed = ""
       result.showTime = false
       result.solutionGridFilePath = ""
 
@@ -414,14 +427,15 @@ when isMainModule:
       return versionStr() & "\n" & """
 
 Options:
-  -h --help              Show this screen
-  --version              Show version
-  --solve=[string]       Solve the sudoku at the given filepath
-  --generate=[0-100]     Generates a sudoku grid with the given difficulty
-  --showGrids            Show sudoku grids
-  --outputFile=[string]  Write result sudoku in the given file path
-  --showTime             Show solving time
-  --checkWith=[string]   Check result sudoku with the given solution
+  -h --help                Show this screen
+  --version                Show version
+  --solve=[string]         Solve the sudoku at the given filepath
+  --generate=[0-100]       Generates a sudoku grid with the given difficulty
+  --generateSeed=[string]  Seed for generating the grid
+  --showGrids              Show sudoku grids
+  --outputFile=[string]    Write result sudoku in the given file path
+  --showTime               Show solving time
+  --checkWith=[string]     Check result sudoku with the given solution
 
 Usage:
   # Solve a sudoku grid and show it with elapsed time
@@ -451,6 +465,7 @@ Notes:
             of "generate":
                cmdOpt.generate = true
                cmdOpt.generateDifficulty = parseInt(val)
+            of "generateSeed": cmdOpt.generateSeed = val
             of "showTime": cmdOpt.showTime = true
             of "checkWith": cmdOpt.solutionGridFilePath = val
          of cmdEnd: assert(false)
@@ -492,7 +507,7 @@ Notes:
 
       elif cmdOpt.generate:
          let startTime = cpuTime()
-         var grid = generate(cmdOpt.generateDifficulty)
+         var grid = generate(cmdOpt.generateDifficulty, cmdOpt.generateSeed)
          let duration = cpuTime() - startTime
 
          if cmdOpt.showGrids:
