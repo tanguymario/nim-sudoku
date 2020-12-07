@@ -3,72 +3,85 @@ import times
 import sequtils
 import random
 import hashes
-from times import getTime, toUnix, nanosecond
 
 ## Util to get position in the sudoku grid
 
-type
-   Pos* = array[2, int]
+{.push exportc: "Sudoku$1", dynlib.}
 
-proc y*(p: Pos): int = return p[0]
-proc x*(p: Pos): int = return p[1]
-proc `y=`*(p: var Pos, v: int) = p[0] = v
-proc `x=`*(p: var Pos, v: int) = p[1] = v
+type
+   Pos* = object
+      x, y: int
+
+proc pos*(y, x: int): Pos = result = Pos(y: y, x: x)
 
 proc outOfBounds*(p: Pos): bool =
    return p.x < 0 or p.x >= 9 or p.y < 0 or p.y >= 9
 
 proc next*(p: var Pos) =
    if p.x >= 8:
-      p.y = p.y + 1
+      p.y += 1
       p.x = 0
    else:
-      p.x = p.x + 1
+      p.x += 1
+
 proc prev*(p: var Pos) =
    if p.x <= 0:
-      p.y = p.y - 1
+      p.y -= 1
       p.x = 8
    else:
-      p.x = p.x - 1
+      p.x -= 1
 
-## Sudoku Cell and Grid
+{.pop.}
+
+
+## Util to get matrices values easily
+
+proc `[]`*[T, Y, X](g: array[Y, array[X, T]], y, x: int): T =
+   return g[y][x]
+proc `[]`*[T, Y, X](g: var array[Y, array[X, T]], y, x: int): var T =
+   return g[y][x]
+proc `[]=`*[T, Y, X](g: var array[Y, array[X, T]], y, x: int, v: T) =
+   g[y][x] = v
+
+proc `[]`*[T, Y, X](g: array[Y, array[X, T]], p: Pos): T =
+   return g[p.y][p.x]
+proc `[]`*[T, Y, X](g: var array[Y, array[X, T]], p: Pos): var T =
+   return g[p.y][p.x]
+proc `[]=`*[T, Y, X](g: var array[Y, array[X, T]], p: Pos, v: T) =
+   g[p.y][p.x] = v
+
+## Iterators
+
+{.push exportc: "Sudoku$1", dynlib.}
 
 type
    SudokuCell* = int
    SudokuGrid* = array[9, array[9, SudokuCell]]
 
-proc `[]`*[T](g: array[9, array[9, T]], y, x: int): T = return g[y][x]
-proc `[]`*[T](g: var array[9, array[9, T]], y, x: int): var T = return g[y][x]
-proc `[]=`*[T](g: var array[9, array[9, T]], y, x: int, v: T) = g[y][x] = v
-
-proc `[]`*[T](g: array[9, array[9, T]], p: Pos): T = return g[p.y][p.x]
-proc `[]`*[T](g: var array[9, array[9, T]], p: Pos): var T = return g[p.y][p.x]
-proc `[]=`*[T](g: var array[9, array[9, T]], p: Pos, v: T) = g[p.y][p.x] = v
-
 iterator gridPos*(): Pos =
    for y in 0 ..< 9:
       for x in  0 ..< 9:
-         yield Pos([y, x])
+         yield pos(y, x)
 
 iterator gridCases*(): Pos =
    for y in 0 ..< 3:
       for x in 0 ..< 3:
-         yield Pos([y * 3, x * 3])
+         yield pos(y * 3, x * 3)
 
 iterator casePos*(p: Pos): Pos =
    let caseY = int(p.y / 3)
    let caseX = int(p.x / 3)
    for y in 0 ..< 3:
       for x in  0 ..< 3:
-         yield Pos([caseY * 3 + y, caseX * 3 + x])
+         yield pos(caseY * 3 + y, caseX * 3 + x)
 
 iterator colPos*(x: int): Pos =
    for y in 0 ..< 9:
-      yield Pos([y, x])
+      yield pos(y, x)
 
 iterator rowPos*(y: int): Pos =
    for x in 0 ..< 9:
-      yield Pos([y, x])
+      yield pos(y, x)
 
 iterator rowColCasePos*(p: Pos): Pos =
    for rp in rowPos(p.y):
@@ -78,32 +91,15 @@ iterator rowColCasePos*(p: Pos): Pos =
    for caseP in casePos(p):
       yield caseP
 
-iterator fromTo*(p1, p2: Pos): Pos =
-   for y in p1.y .. p2.y:
-      for x in p1.x .. p2.x:
-         yield Pos([y, x])
+## Sudoku Cell and Grid
 
-proc `[]`*[T](g: array[9, array[9, T]], p1, p2: Pos): seq[T] =
-   result = @[]
-   for p in fromTo(p1, p2):
-      result.add(g[p])
-proc `[]`*[T](g: var array[9, array[9, T]], p1, p2: Pos): seq[T] =
-   result = @[]
-   for p in fromTo(p1, p2):
-      result.add(g[p])
+{.push exportc: "SudokuSolver$1", dynlib.}
 
 proc filled*(c: SudokuCell): bool = return c != 0
-proc filled*(c, v: SudokuCell): bool = return c == v
 
 proc filledAt*(g: SudokuGrid, pos: openArray[Pos]): bool =
    for p in pos:
       if g[p].filled:
-         return true
-   return false
-
-proc filledAt*(g: SudokuGrid, pos: openArray[Pos], v: SudokuCell): bool =
-   for p in pos:
-      if g[p].filled(v):
          return true
    return false
 
@@ -136,7 +132,7 @@ proc fancyStr*(g: SudokuGrid): string =
       result &= "\n"
    result &= "╚═══════╩═══════╩═══════╝\n"
 
-proc createSudokuGrid*(): SudokuGrid =
+proc createEmptySudokuGrid*(): SudokuGrid =
    for p in gridPos():
       result[p] = 0
 
@@ -144,7 +140,7 @@ proc createSudokuGrid*(m: array[9, array[9, SudokuCell]]): SudokuGrid =
    for p in gridPos():
       result[p] = m[p]
 
-proc createSudokuGrid*(filePath: string): SudokuGrid =
+proc readSudokuGridFromFile*(filePath: string): SudokuGrid =
    let gridStr = readFile(filePath).split({'\n', ' '})
    for p in gridPos():
       result[p] = parseInt(gridStr[p.y * 9 + p.x])
@@ -154,7 +150,11 @@ proc writeToFile*(g: SudokuGrid, filePath: string) =
    f.write($g)
    f.close()
 
+{.pop.}
+
 ## Sudoku Cell and Grid Solvers. They represent the possibilities of the sudoku
+
+{.push exportc: "Solver$1", dynlib.}
 
 type
    SolverCell* = seq[int]
@@ -216,7 +216,7 @@ proc checkForcedDigits(sg: var SolverGrid) =
             for caseX in 0 ..< 3:
                for y in 0 ..< 3:
                   for x in 0 ..< 3:
-                     let p = Pos([caseY * 3 + y, caseX * 3 + x])
+                     let p = pos(caseY * 3 + y, caseX * 3 + x)
                      let casePossibilitiesPos =
                         sg.getPossiblePos(toSeq(casePos(p)), v)
                      if len(casePossibilitiesPos) == 1:
@@ -239,6 +239,12 @@ proc createSolverGrid*(g: SudokuGrid): SolverGrid =
          result.onFilled(p)
 
    result.checkForcedDigits()
+
+{.pop.}
+
+## Solving algorithm (backtracing)
+
+{.push exportc: "Sudoku$1", dynlib.}
 
 type
    SolveOpts* = object
@@ -278,7 +284,9 @@ proc backtracing(
 
    var i = 0
 
-   let increaseValueOrGoBack = proc(g: var SudokuGrid): bool =
+   let increaseValueOrGoBack = proc(
+      g: var SudokuGrid, cells: var seq[PossibleCell], i: var int): bool =
+
       while true:
          if cells[i].ind < len(cells[i].possibilities) - 1:
             cells[i].ind += 1
@@ -301,7 +309,7 @@ proc backtracing(
             break
 
       if invalid:
-         if not increaseValueOrGoBack(g):
+         if not increaseValueOrGoBack(g, cells, i):
             break
       else:
          g[cells[i].p] = v
@@ -317,10 +325,15 @@ proc backtracing(
             else:
                resultInfo.solutionFound = true
                i -= 1
-               if not increaseValueOrGoBack(g):
+               if not increaseValueOrGoBack(g, cells, i):
                   break
 
-proc solve*(g: var SudokuGrid, opts: SolveOpts): SolveResultInfo =
+proc solve*(
+   g: var SudokuGrid,
+   opts: SolveOpts=SolveOpts(
+      randomizeBacktracingIndices: false,
+      checkIfMultipleSolutionsExists: false)): SolveResultInfo {.discardable.} =
+
    result = SolveResultInfo(
       solutionFound: false,
       multipleGridsExist: false)
@@ -330,31 +343,33 @@ proc solve*(g: var SudokuGrid, opts: SolveOpts): SolveResultInfo =
       sg.apply(g)
       g.backtracing(sg, opts, result)
 
-proc solve*(g: var SudokuGrid) =
-   discard g.solve(SolveOpts(
-      randomizeBacktracingIndices: false,
-      checkIfMultipleSolutionsExists: false))
+{.pop.}
 
 ## Generate Sudoku
 
-proc generateNaiveFullGrid*(): SudokuGrid = result.solve()
-const NaiveGeneratedFullGrid*: SudokuGrid = generateNaiveFullGrid()
+{.push exportc, dynlib.}
 
-proc generateRandomFullGrid*(r: var Rand): SudokuGrid =
+proc generateNaiveGrid*(): SudokuGrid = discard result.solve()
+const NaiveGeneratedGrid*: SudokuGrid = generateNaiveGrid()
+
+proc generateRandomGrid*(r: var Rand): SudokuGrid =
    discard result.solve(SolveOpts(
       randomizeBacktracingIndices: true,
       rand: r,
       checkIfMultipleSolutionsExists: false))
 
-proc generate*(difficulty: int, seed=""): SudokuGrid =
+proc generateGrid*(difficulty: int, seed: string): SudokuGrid =
    var r: Rand
    if not seed.isEmptyOrWhitespace:
       r = initRand(int64(hash(seed)))
    else:
       let now = getTime()
-      r = initRand(now.toUnix * 1_000_000_000 + now.nanosecond)
+      when defined(js):
+         r = initRand(now.nanosecond)
+      else:
+         r = initRand(now.toUnix * 1_000_000 + now.nanosecond)
 
-   let originalGeneratedGrid = generateRandomFullGrid(r)
+   let originalGeneratedGrid = generateRandomGrid(r)
 
    # Minimum number of clues to have a unique solution is 17
    # See https://arxiv.org/pdf/1201.0749.pdf
@@ -384,7 +399,11 @@ proc generate*(difficulty: int, seed=""): SudokuGrid =
       else:
          inc(nbCellsRemoved)
 
-when isMainModule:
+{.pop.}
+
+## CLI Command
+
+when isMainModule and appType == "console" and not defined(js):
    import parseopt
 
    const version = 0.1
@@ -470,7 +489,7 @@ Notes:
       elif cmdOpt.showVersion:
          echo versionStr()
       elif not cmdOpt.gridToSolvePath.isEmptyOrWhitespace:
-         var grid = createSudokuGrid(cmdOpt.gridToSolvePath)
+         var grid = readSudokuGridFromFile(cmdOpt.gridToSolvePath)
 
          if cmdOpt.showGrids:
             echo "Input Grid"
@@ -485,7 +504,8 @@ Notes:
             echo grid.fancyStr()
 
          if not cmdOpt.solutionGridFilePath.isEmptyOrWhitespace:
-            let solutionGrid = createSudokuGrid(cmdOpt.solutionGridFilePath)
+            let solutionGrid = readSudokuGridFromFile(
+               cmdOpt.solutionGridFilePath)
             if grid == solutionGrid:
                echo "Solved grid and given solution grid are same!"
             else:
@@ -502,7 +522,7 @@ Notes:
 
       elif cmdOpt.generate:
          let startTime = cpuTime()
-         var grid = generate(cmdOpt.generateDifficulty, cmdOpt.generateSeed)
+         var grid = generateGrid(cmdOpt.generateDifficulty, cmdOpt.generateSeed)
          let duration = cpuTime() - startTime
 
          if cmdOpt.showGrids:
