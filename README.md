@@ -6,4 +6,9 @@ Made with nim 1.4.0
 
 # Build
 
-Type "make" in the root folder, the executable file would be "bin/nim-sudoku"
+Following builds can be done:
+    - console: make cliapp / cliapp-release
+    - lib c:   make clib / clib-release
+    - lib js:  make jslib / jslib-release
+
+Result would be in the "bin/" folder
