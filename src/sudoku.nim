@@ -412,7 +412,6 @@ when isMainModule and appType == "console" and not defined(js):
       CmdOpt = object
          showHelp: bool
          showVersion: bool
-         inputFilePath: string
          outputFilePath: string
          showGrids: bool
          gridToSolvePath: string
@@ -425,7 +424,6 @@ when isMainModule and appType == "console" and not defined(js):
    proc createCmdOpt(): CmdOpt =
       result.showHelp = false
       result.showVersion = false
-      result.inputFilePath = ""
       result.outputFilePath = ""
       result.showGrids = false
       result.gridToSolvePath = ""
